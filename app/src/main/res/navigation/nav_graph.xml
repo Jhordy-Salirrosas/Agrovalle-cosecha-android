@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/menuPrincipalFragment">
+
+    <!-- Menú Principal (inicio) -->
+    <fragment
+        android:id="@+id/menuPrincipalFragment"
+        android:name="com.dapm.android.agrovalle.ui.menu.MenuPrincipalFragment"
+        android:label="AgroValle Cosecha"
+        tools:layout="@layout/fragment_menu_principal">
+        <action
+            android:id="@+id/action_menu_to_asistencia"
+            app:destination="@id/asistenciaFragment"
+            app:enterAnim="@anim/nav_default_enter_anim"
+            app:exitAnim="@anim/nav_default_exit_anim"
+            app:popEnterAnim="@anim/nav_default_pop_enter_anim"
+            app:popExitAnim="@anim/nav_default_pop_exit_anim" />
+        <action
+            android:id="@+id/action_menu_to_pesaje"
+            app:destination="@id/pesajeFragment"
+            app:enterAnim="@anim/nav_default_enter_anim"
+            app:exitAnim="@anim/nav_default_exit_anim"
+            app:popEnterAnim="@anim/nav_default_pop_enter_anim"
+            app:popExitAnim="@anim/nav_default_pop_exit_anim" />
+        <action
+            android:id="@+id/action_menu_to_calibracion"
+            app:destination="@id/calibracionTaraFragment"
+            app:enterAnim="@anim/nav_default_enter_anim"
+            app:exitAnim="@anim/nav_default_exit_anim"
+            app:popEnterAnim="@anim/nav_default_pop_enter_anim"
+            app:popExitAnim="@anim/nav_default_pop_exit_anim" />
+    </fragment>
+
+    <!-- Registro de Asistencia (AGV-001, AGV-016) -->
+    <fragment
+        android:id="@+id/asistenciaFragment"
+        android:name="com.dapm.android.agrovalle.ui.asistencia.AsistenciaFragment"
+        android:label="Asistencia"
+        tools:layout="@layout/fragment_asistencia">
+        <action
+            android:id="@+id/action_asistencia_to_escanerQr"
+            app:destination="@id/escanerQrFragment" />
+    </fragment>
+
+    <!-- Escáner QR de Fotocheck -->
+    <fragment
+        android:id="@+id/escanerQrFragment"
+        android:name="com.dapm.android.agrovalle.ui.asistencia.EscanerQrFragment"
+        android:label="Escanear QR"
+        tools:layout="@layout/fragment_escaner_qr" />
+
+    <!-- Pesaje de Jabas (AGV-002, AGV-003, AGV-004) -->
+    <fragment
+        android:id="@+id/pesajeFragment"
+        android:name="com.dapm.android.agrovalle.ui.pesaje.PesajeFragment"
+        android:label="Pesaje"
+        tools:layout="@layout/fragment_pesaje" />
+
+    <!-- Calibración de Tara (AGV-015) -->
+    <fragment
+        android:id="@+id/calibracionTaraFragment"
+        android:name="com.dapm.android.agrovalle.ui.pesaje.CalibracionTaraFragment"
+        android:label="Calibración de Tara"
+        tools:layout="@layout/fragment_calibracion_tara" />
+
+</navigation>
