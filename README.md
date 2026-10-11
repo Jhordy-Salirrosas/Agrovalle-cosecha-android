@@ -81,7 +81,7 @@ com.agrovalle.cosecha/
    ```bash
    git clone <url-del-repo>
    cd Agrovalle-cosecha-android
-   git checkout feature/sprint-1-redesign
+   git checkout feature/sprint-1-implementacion
    ```
 
 2. **Abrir en Android Studio:**
