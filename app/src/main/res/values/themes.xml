@@ -1,11 +1,9 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Base.Theme.AgroValle" parent="Theme.Material3.Light.NoActionBar">
-        <item name="colorPrimary">@color/primaryColor</item>
-        <item name="colorOnPrimary">@color/colorOnPrimary</item>
-        <item name="colorSecondary">@color/secondaryColor</item>
-        <item name="colorOnSecondary">@color/colorOnSecondary</item>
-        <item name="android:colorBackground">@color/backgroundColor</item>
-        <item name="colorOnBackground">@color/colorOnBackground</item>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema base Material3 para la Activity que hostea Compose -->
+    <style name="Theme.AgroValleCosecha" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:navigationBarColor">#121212</item>
+        <item name="android:windowBackground">#121212</item>
     </style>
-    <style name="Theme.AgroValle" parent="Base.Theme.AgroValle" />
 </resources>

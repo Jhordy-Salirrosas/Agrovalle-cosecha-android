@@ -1,9 +1,7 @@
-buildscript {
-    dependencies {
-        val nav_version = "2.7.7"
-        classpath("androidx.navigation:navigation-safe-args-gradle-plugin:$nav_version")
-    }
-}
+// ============================================================================
+// AgroValle Cosecha - Root Build Configuration
+// Sprint 1: Jetpack Compose + Material 3 + Room + MVVM
+// ============================================================================
 
 plugins {
     id("com.android.application") version "8.2.0" apply false
