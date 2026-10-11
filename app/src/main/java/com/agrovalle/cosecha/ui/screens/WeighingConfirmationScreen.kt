@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -179,7 +180,7 @@ fun WeighingConfirmationScreen(
 
                     if (resultado != null) {
                         Text(
-                            text = "${resultado!!.jornaleroNombre} · ${resultado!!.cantidadJabas} jabas",
+                            text = "${resultado.jornaleroNombre} · ${resultado.cantidadJabas} jabas",
                             style = MaterialTheme.typography.bodySmall,
                             color = AgroTextSecondary
                         )
@@ -234,7 +235,7 @@ fun WeighingConfirmationScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.VolumeUp,
+                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                     contentDescription = "Sonido",
                     tint = AgroTextHint,
                     modifier = Modifier.size(16.dp)

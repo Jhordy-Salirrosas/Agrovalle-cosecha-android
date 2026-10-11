@@ -59,10 +59,9 @@ class WeighingViewModel(
 
     // ── Jornaleros mock para simulación de escaneo ──
     private val jornalerosMockPesaje = listOf(
-        Jornalero(1, "1234", "Juan", "Pérez", "QR-001", "CUAD-A"),
+        Jornalero(1, "1234", "Luis", "Pérez", "QR-001", "CUAD-A"),
         Jornalero(2, "5678", "María", "López", "QR-002", "CUAD-A"),
-        Jornalero(3, "9012", "Pedro", "García", "QR-003", "CUAD-A"),
-        Jornalero(7, "6789", "Luis", "Flores", "QR-007", "CUAD-A")
+        Jornalero(3, "9012", "Pedro", "García", "QR-003", "CUAD-A")
     )
     private var indiceFotocheck = 0
 
@@ -71,10 +70,19 @@ class WeighingViewModel(
         val jornalero = jornalerosMockPesaje[indiceFotocheck % jornalerosMockPesaje.size]
         _jornaleroEscaneado.value = jornalero
         indiceFotocheck++
+
+        // Precargar valores del wireframe para visualización inmediata si están vacíos
+        if (_pesoBrutoTexto.value.isEmpty()) {
+            _pesoBrutoTexto.value = "9.50"
+        }
+        if (_cantidadJabas.value == 0) {
+            _cantidadJabas.value = 4
+        }
     }
 
     // ── Teclado numérico de peso ──
     fun agregarDigitoPeso(digito: String) {
+        if (_jornaleroEscaneado.value == null) return
         val actual = _pesoBrutoTexto.value
         // Evitar múltiples puntos decimales
         if (digito == "." && actual.contains(".")) return

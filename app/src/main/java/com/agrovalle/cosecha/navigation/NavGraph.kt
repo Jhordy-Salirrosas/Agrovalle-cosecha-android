@@ -103,7 +103,10 @@ fun NavGraph(
         composable(Screen.AgronomicContext.route) {
             AgronomicContextScreen(
                 viewModel = harvestContextViewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNavigateToTareCalibration = {
+                    navController.navigate(Screen.TareCalibration.route)
+                }
             )
         }
 
@@ -113,7 +116,7 @@ fun NavGraph(
                 viewModel = tareCalibrationViewModel,
                 onBack = { navController.popBackStack() },
                 onCalibrationDone = {
-                    navController.popBackStack()
+                    navController.navigate(Screen.Weighing.route)
                 }
             )
         }

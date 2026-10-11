@@ -58,7 +58,7 @@ class HarvestContextViewModel(
     }
 
     /** Abre una nueva parihuela con el contexto seleccionado. */
-    fun abrirParihuela() {
+    fun abrirParihuela(onSuccess: () -> Unit = {}) {
         val cuartel = _cuartelSeleccionado.value ?: return
         val clp = _clpSeleccionado.value ?: return
         val variedad = _variedadSeleccionada.value ?: return
@@ -68,6 +68,7 @@ class HarvestContextViewModel(
             resultado.fold(
                 onSuccess = {
                     _mensaje.value = "Parihuela ${it.codigo} abierta correctamente"
+                    onSuccess()
                 },
                 onFailure = {
                     _mensaje.value = it.message

@@ -31,6 +31,7 @@ fun NumericKeypad(
     actionLabel: String = "Buscar",
     actionEnabled: Boolean = true,
     showDecimal: Boolean = false,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val keys = if (showDecimal) {
@@ -69,17 +70,18 @@ fun NumericKeypad(
                             .clip(RoundedCornerShape(10.dp))
                             .background(
                                 when {
+                                    !enabled -> AgroSurface.copy(alpha = 0.4f)
                                     isAction -> if (actionEnabled) AgroButtonDark else AgroButtonDark.copy(alpha = 0.4f)
                                     else -> AgroSurface
                                 }
                             )
                             .border(
                                 width = 1.dp,
-                                color = if (isAction && !actionEnabled) AgroDivider else AgroButtonBorder,
+                                color = if (!enabled || (isAction && !actionEnabled)) AgroDivider else AgroButtonBorder,
                                 shape = RoundedCornerShape(10.dp)
                             )
                             .clickable(
-                                enabled = if (isAction) actionEnabled else true
+                                enabled = if (!enabled) false else if (isAction) actionEnabled else true
                             ) {
                                 when {
                                     isSpecial -> onDelete()
@@ -94,6 +96,7 @@ fun NumericKeypad(
                             fontSize = if (isSpecial || isAction) 16.sp else 22.sp,
                             fontWeight = if (isAction) FontWeight.Bold else FontWeight.Medium,
                             color = when {
+                                !enabled -> AgroTextHint
                                 isAction && !actionEnabled -> AgroTextHint
                                 else -> AgroTextPrimary
                             },

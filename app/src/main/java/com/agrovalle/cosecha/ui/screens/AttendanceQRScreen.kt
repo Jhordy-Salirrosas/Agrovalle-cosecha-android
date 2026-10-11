@@ -6,18 +6,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agrovalle.cosecha.ui.components.*
 import com.agrovalle.cosecha.ui.theme.*
 import com.agrovalle.cosecha.ui.viewmodels.AttendanceViewModel
+import com.agrovalle.cosecha.util.SonidoVibracionHelper
 
 /**
  * Pantalla 3.3: Asistencia QR (AGV-001).
@@ -39,6 +42,8 @@ fun AttendanceQRScreen(
     val ultimoRegistro by viewModel.ultimoRegistro.collectAsState()
     val mensaje by viewModel.mensaje.collectAsState()
     val esError by viewModel.esError.collectAsState()
+    val context = LocalContext.current
+    val helper = remember(context) { SonidoVibracionHelper(context) }
 
     Column(
         modifier = Modifier
@@ -78,7 +83,7 @@ fun AttendanceQRScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
-                        imageVector = Icons.Default.VolumeUp,
+                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = "Sonido",
                         tint = AgroTextSecondary,
                         modifier = Modifier.size(18.dp)
@@ -103,7 +108,12 @@ fun AttendanceQRScreen(
             // ── Botón "Escanear QR" ──
             BigButtonDark(
                 text = "📷  Escanear QR",
-                onClick = { viewModel.simularEscaneoQr() }
+                onClick = {
+                    viewModel.simularEscaneoQr(
+                        onSuccess = { helper.confirmarExito() },
+                        onError = { helper.notificarError() }
+                    )
+                }
             )
 
             Spacer(modifier = Modifier.height(10.dp))

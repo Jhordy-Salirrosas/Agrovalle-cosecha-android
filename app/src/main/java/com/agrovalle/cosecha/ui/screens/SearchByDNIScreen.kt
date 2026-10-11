@@ -17,9 +17,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.agrovalle.cosecha.ui.components.*
 import com.agrovalle.cosecha.ui.theme.*
 import com.agrovalle.cosecha.ui.viewmodels.AttendanceViewModel
+import com.agrovalle.cosecha.util.SonidoVibracionHelper
 
 /**
  * Pantalla 3.4: Búsqueda por DNI (AGV-016).
@@ -40,6 +42,8 @@ fun SearchByDNIScreen(
     val hasBuscado by viewModel.hasBuscado.collectAsState()
     val mensaje by viewModel.mensaje.collectAsState()
     val esError by viewModel.esError.collectAsState()
+    val context = LocalContext.current
+    val helper = remember(context) { SonidoVibracionHelper(context) }
 
     Column(
         modifier = Modifier
@@ -207,7 +211,11 @@ fun SearchByDNIScreen(
                             SmallButton(
                                 text = "Confirmar Asistencia",
                                 onClick = {
-                                    viewModel.confirmarAsistenciaPorDni(jornalero)
+                                    viewModel.confirmarAsistenciaPorDni(
+                                        jornalero = jornalero,
+                                        onSuccess = { helper.confirmarExito() },
+                                        onError = { helper.notificarError() }
+                                    )
                                     onAsistenciaConfirmada()
                                 }
                             )

@@ -43,7 +43,10 @@ class AttendanceViewModel(
     val esError: StateFlow<Boolean> = _esError.asStateFlow()
 
     /** Simula un escaneo QR exitoso con un jornalero aleatorio del padrón. */
-    fun simularEscaneoQr() {
+    fun simularEscaneoQr(
+        onSuccess: () -> Unit = {},
+        onError: () -> Unit = {}
+    ) {
         viewModelScope.launch {
             // Simular escaneo del siguiente jornalero disponible
             val codigosQr = listOf("QR-001", "QR-002", "QR-003", "QR-004", "QR-005",
@@ -58,15 +61,18 @@ class AttendanceViewModel(
                     onSuccess = {
                         _mensaje.value = "✓ ${it.nombreCompleto} registrado a las ${it.horaRegistro}"
                         _esError.value = false
+                        onSuccess()
                     },
                     onFailure = {
                         _mensaje.value = it.message
                         _esError.value = true
+                        onError()
                     }
                 )
             } else {
                 _mensaje.value = "QR no reconocido"
                 _esError.value = true
+                onError()
             }
         }
     }
@@ -101,17 +107,23 @@ class AttendanceViewModel(
     }
 
     /** Confirma la asistencia de un jornalero encontrado por DNI. */
-    fun confirmarAsistenciaPorDni(jornalero: Jornalero) {
+    fun confirmarAsistenciaPorDni(
+        jornalero: Jornalero,
+        onSuccess: () -> Unit = {},
+        onError: () -> Unit = {}
+    ) {
         viewModelScope.launch {
             val resultado = repository.registrarAsistencia(jornalero.id, TipoIngreso.MANUAL)
             resultado.fold(
                 onSuccess = {
                     _mensaje.value = "✓ ${it.nombreCompleto} registrado manualmente"
                     _esError.value = false
+                    onSuccess()
                 },
                 onFailure = {
                     _mensaje.value = it.message
                     _esError.value = true
+                    onError()
                 }
             )
         }

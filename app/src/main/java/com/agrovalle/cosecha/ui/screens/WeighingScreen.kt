@@ -292,7 +292,8 @@ fun WeighingScreen(
             NumericKeypad(
                 onKeyPress = { viewModel.agregarDigitoPeso(it) },
                 onDelete = { viewModel.borrarDigitoPeso() },
-                showDecimal = true
+                showDecimal = true,
+                enabled = jornalero != null
             )
 
             Spacer(modifier = Modifier.height(16.dp))

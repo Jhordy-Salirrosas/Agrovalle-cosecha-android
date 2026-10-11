@@ -33,7 +33,8 @@ import com.agrovalle.cosecha.ui.viewmodels.HarvestContextViewModel
 @Composable
 fun AgronomicContextScreen(
     viewModel: HarvestContextViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToTareCalibration: () -> Unit = {}
 ) {
     val cuartelSeleccionado by viewModel.cuartelSeleccionado.collectAsState()
     val clpSeleccionado by viewModel.clpSeleccionado.collectAsState()
@@ -258,10 +259,17 @@ fun AgronomicContextScreen(
                 text = "Cerrar Parihuela",
                 onClick = { viewModel.cerrarParihuela() }
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            BigButtonOutlined(
+                text = "Continuar a Calibrar Tara →",
+                onClick = onNavigateToTareCalibration
+            )
         } else {
             BigButtonPrimary(
                 text = "Abrir Parihuela",
-                onClick = { viewModel.abrirParihuela() },
+                onClick = {
+                    viewModel.abrirParihuela(onSuccess = onNavigateToTareCalibration)
+                },
                 enabled = viewModel.formularioCompleto
             )
         }
