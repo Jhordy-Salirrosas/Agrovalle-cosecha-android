@@ -16,7 +16,6 @@
         <activity
             android:name=".view.LoginActivity"
             android:exported="true"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -27,46 +26,39 @@
         <!-- 2. Menú Principal -->
         <activity
             android:name=".view.MenuActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
         <!-- 3. Registro de Asistencia QR -->
         <activity
             android:name=".view.AsistenciaQRActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
         <!-- 4. Búsqueda por DNI -->
         <activity
             android:name=".view.BusquedaDNIActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- 5. Contexto Agronómico del Turno -->
         <activity
             android:name=".view.ContextoAgronomicoActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
         <!-- 6. Calibración de Tara -->
         <activity
             android:name=".view.CalibrarTaraActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
         <!-- 7. Registro de Pesaje en Campo -->
         <activity
             android:name=".view.RegistrarPesajeActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- 8. Confirmación de Pesaje -->
         <activity
             android:name=".view.ConfirmacionActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="false" />
 
     </application>
 
