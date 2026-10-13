@@ -23,7 +23,9 @@ class ConfirmacionActivity : AppCompatActivity() {
         val esTaraCalibrada = intent.getBooleanExtra(RegistrarPesajeActivity.EXTRA_ES_TARA_CALIBRADA, true)
 
         configurarEstadoVisual(esTaraCalibrada, pesoNeto, acumuladoDiario)
-        activarFeedbackSensorial(esTaraCalibrada)
+        if (savedInstanceState == null) {
+            activarFeedbackSensorial(esTaraCalibrada)
+        }
         configurarNavegacion()
     }
 
