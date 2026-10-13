@@ -18,9 +18,9 @@ class ConfirmacionActivity : AppCompatActivity() {
         binding = ActivityConfirmacionBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val pesoNeto = intent.getDoubleExtra("EXTRA_PESO_NETO", 8.00)
-        val acumuladoDiario = intent.getDoubleExtra("EXTRA_ACUMULADO_DIARIO", 45.50)
-        val esTaraCalibrada = intent.getBooleanExtra("EXTRA_ES_TARA_CALIBRADA", true)
+        val pesoNeto = intent.getDoubleExtra(RegistrarPesajeActivity.EXTRA_PESO_NETO, 8.00)
+        val acumuladoDiario = intent.getDoubleExtra(RegistrarPesajeActivity.EXTRA_ACUMULADO_DIARIO, 45.50)
+        val esTaraCalibrada = intent.getBooleanExtra(RegistrarPesajeActivity.EXTRA_ES_TARA_CALIBRADA, true)
 
         configurarEstadoVisual(esTaraCalibrada, pesoNeto, acumuladoDiario)
         activarFeedbackSensorial(esTaraCalibrada)

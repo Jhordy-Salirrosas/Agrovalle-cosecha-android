@@ -13,6 +13,11 @@ import com.agrovalle.cosecha.viewmodel.TurnoViewModel
 
 class ContextoAgronomicoActivity : AppCompatActivity() {
 
+    companion object {
+        const val EXTRA_CUARTEL = "extra_cuartel"
+        const val EXTRA_VARIEDAD = "extra_variedad"
+    }
+
     private lateinit var binding: ActivityContextoBinding
     private val viewModel: TurnoViewModel by viewModels()
 
@@ -96,8 +101,8 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
 
         // Navegar a CalibrarTaraActivity
         val intent = Intent(this, CalibrarTaraActivity::class.java).apply {
-            putExtra("EXTRA_CUARTEL", cuartel)
-            putExtra("EXTRA_VARIEDAD", variedad)
+            putExtra(EXTRA_CUARTEL, cuartel)
+            putExtra(EXTRA_VARIEDAD, variedad)
         }
         startActivity(intent)
     }

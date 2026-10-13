@@ -18,13 +18,17 @@ class AsistenciaQRActivity : AppCompatActivity() {
 
     private var indiceSimulado = 0
 
+    companion object {
+        private const val KEY_INDICE_SIMULADO = "key_indice_simulado"
+    }
+
     // Launcher para recibir resultado de Búsqueda por DNI
     private val busquedaDniLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val nombre = result.data?.getStringExtra("EXTRA_NOMBRE_JORNALERO") ?: "Jornalero Registrado"
-            val dni = result.data?.getStringExtra("EXTRA_DNI_JORNALERO") ?: ""
+            val nombre = result.data?.getStringExtra(BusquedaDNIActivity.EXTRA_NOMBRE_JORNALERO) ?: "Jornalero Registrado"
+            val dni = result.data?.getStringExtra(BusquedaDNIActivity.EXTRA_DNI_JORNALERO) ?: ""
             registrarAsistenciaManual(nombre, dni)
         }
     }
@@ -34,8 +38,15 @@ class AsistenciaQRActivity : AppCompatActivity() {
         binding = ActivityAsistenciaQrBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        indiceSimulado = savedInstanceState?.getInt(KEY_INDICE_SIMULADO) ?: 0
+
         observarEstado()
         configurarEventos()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_INDICE_SIMULADO, indiceSimulado)
     }
 
     private fun observarEstado() {

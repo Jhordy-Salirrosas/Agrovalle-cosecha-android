@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.os.BundleCompat
 import com.agrovalle.cosecha.databinding.ActivityBusquedaDniBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.viewmodel.TurnoViewModel
@@ -18,14 +19,35 @@ class BusquedaDNIActivity : AppCompatActivity() {
     private var digitosIngresados: String = ""
     private var jornaleroEncontrado: Jornalero? = null
 
+    companion object {
+        const val EXTRA_NOMBRE_JORNALERO = "extra_nombre_jornalero"
+        const val EXTRA_DNI_JORNALERO = "extra_dni_jornalero"
+
+        private const val KEY_DIGITOS = "key_digitos"
+        private const val KEY_JORNALERO = "key_jornalero"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBusquedaDniBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        if (savedInstanceState != null) {
+            digitosIngresados = savedInstanceState.getString(KEY_DIGITOS) ?: ""
+            jornaleroEncontrado = BundleCompat.getSerializable(savedInstanceState, KEY_JORNALERO, Jornalero::class.java)
+        }
+
         configurarTeclado()
         configurarEventos()
         actualizarDisplay()
+
+        jornaleroEncontrado?.let { mostrarResultado(it) }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(KEY_DIGITOS, digitosIngresados)
+        outState.putSerializable(KEY_JORNALERO, jornaleroEncontrado)
     }
 
     private fun configurarTeclado() {
@@ -71,8 +93,8 @@ class BusquedaDNIActivity : AppCompatActivity() {
         binding.btnConfirmarAsistencia.setOnClickListener {
             jornaleroEncontrado?.let { j ->
                 val resultadoIntent = Intent().apply {
-                    putExtra("EXTRA_NOMBRE_JORNALERO", j.nombreCompleto)
-                    putExtra("EXTRA_DNI_JORNALERO", j.dni)
+                    putExtra(EXTRA_NOMBRE_JORNALERO, j.nombreCompleto)
+                    putExtra(EXTRA_DNI_JORNALERO, j.dni)
                 }
                 setResult(Activity.RESULT_OK, resultadoIntent)
                 finish()
@@ -97,15 +119,23 @@ class BusquedaDNIActivity : AppCompatActivity() {
         if (resultados.isNotEmpty()) {
             val primero = resultados.first()
             jornaleroEncontrado = primero
-            binding.tvNombreJornalero.text = primero.nombreCompleto
-            binding.tvDniCompleto.text = "DNI: ${primero.dni} • Cuadrilla ${primero.cuadrillaCodigo}"
-            binding.cardResultado.visibility = View.VISIBLE
-            binding.tvEstadoVacio.visibility = View.GONE
+            mostrarResultado(primero)
         } else {
             jornaleroEncontrado = null
-            binding.cardResultado.visibility = View.GONE
-            binding.tvEstadoVacio.visibility = View.VISIBLE
-            binding.tvEstadoVacio.text = "No se encontró ningún jornalero con DNI que coincida con '$digitosIngresados'"
+            mostrarResultadoVacio()
         }
+    }
+
+    private fun mostrarResultado(jornalero: Jornalero) {
+        binding.tvNombreJornalero.text = jornalero.nombreCompleto
+        binding.tvDniCompleto.text = "DNI: ${jornalero.dni} • Cuadrilla ${jornalero.cuadrillaCodigo}"
+        binding.cardResultado.visibility = View.VISIBLE
+        binding.tvEstadoVacio.visibility = View.GONE
+    }
+
+    private fun mostrarResultadoVacio() {
+        binding.cardResultado.visibility = View.GONE
+        binding.tvEstadoVacio.visibility = View.VISIBLE
+        binding.tvEstadoVacio.text = "No se encontró ningún jornalero con DNI que coincida con '$digitosIngresados'"
     }
 }

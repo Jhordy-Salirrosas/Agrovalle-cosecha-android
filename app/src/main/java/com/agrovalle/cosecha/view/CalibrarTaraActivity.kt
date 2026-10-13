@@ -22,10 +22,26 @@ class CalibrarTaraActivity : AppCompatActivity() {
 
     private lateinit var vistasPasos: List<TextView>
 
+    companion object {
+        const val EXTRA_TARA = "extra_tara"
+        const val EXTRA_ES_CALIBRADA = "extra_es_calibrada"
+
+        private const val KEY_MUESTRAS = "key_muestras_tara"
+        private const val KEY_PESO_MUESTRA = "key_peso_muestra"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCalibrarTaraBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        if (savedInstanceState != null) {
+            savedInstanceState.getDoubleArray(KEY_MUESTRAS)?.let { muestras ->
+                listaMuestras.clear()
+                listaMuestras.addAll(muestras.toList())
+            }
+            pesoActualMuestra = savedInstanceState.getDouble(KEY_PESO_MUESTRA, 0.375)
+        }
 
         vistasPasos = listOf(
             binding.tvPaso1,
@@ -36,7 +52,14 @@ class CalibrarTaraActivity : AppCompatActivity() {
         )
 
         configurarEventos()
+        actualizarDisplayPesoMuestra()
         actualizarUiPasoActual()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putDoubleArray(KEY_MUESTRAS, listaMuestras.toDoubleArray())
+        outState.putDouble(KEY_PESO_MUESTRA, pesoActualMuestra)
     }
 
     private fun configurarEventos() {
@@ -68,8 +91,8 @@ class CalibrarTaraActivity : AppCompatActivity() {
             FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = false)
 
             val intent = Intent(this, RegistrarPesajeActivity::class.java).apply {
-                putExtra("EXTRA_TARA", promedioRedondeado)
-                putExtra("EXTRA_ES_CALIBRADA", true)
+                putExtra(EXTRA_TARA, promedioRedondeado)
+                putExtra(EXTRA_ES_CALIBRADA, true)
             }
             startActivity(intent)
             finish()
@@ -81,8 +104,8 @@ class CalibrarTaraActivity : AppCompatActivity() {
             FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
 
             val intent = Intent(this, RegistrarPesajeActivity::class.java).apply {
-                putExtra("EXTRA_TARA", TurnoViewModel.TARA_POR_DEFECTO)
-                putExtra("EXTRA_ES_CALIBRADA", false)
+                putExtra(EXTRA_TARA, TurnoViewModel.TARA_POR_DEFECTO)
+                putExtra(EXTRA_ES_CALIBRADA, false)
             }
             startActivity(intent)
             finish()

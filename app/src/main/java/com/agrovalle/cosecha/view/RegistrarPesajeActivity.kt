@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.os.BundleCompat
 import com.agrovalle.cosecha.databinding.ActivityRegistrarPesajeBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.util.FeedbackUtil
@@ -21,13 +22,23 @@ class RegistrarPesajeActivity : AppCompatActivity() {
     private var valorTara: Double = TurnoViewModel.TARA_POR_DEFECTO
     private var esTaraCalibrada: Boolean = false
 
+    companion object {
+        const val EXTRA_PESO_NETO = "extra_peso_neto"
+        const val EXTRA_ACUMULADO_DIARIO = "extra_acumulado_diario"
+        const val EXTRA_ES_TARA_CALIBRADA = "extra_es_tara_calibrada"
+
+        private const val KEY_JORNALERO = "key_jornalero_pesaje"
+        private const val KEY_ENTRADA_PESO = "key_entrada_peso"
+        private const val KEY_CANTIDAD_JABAS = "key_cantidad_jabas"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityRegistrarPesajeBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        valorTara = intent.getDoubleExtra("EXTRA_TARA", TurnoViewModel.TARA_POR_DEFECTO)
-        esTaraCalibrada = intent.getBooleanExtra("EXTRA_ES_CALIBRADA", false)
+        valorTara = intent.getDoubleExtra(CalibrarTaraActivity.EXTRA_TARA, TurnoViewModel.TARA_POR_DEFECTO)
+        esTaraCalibrada = intent.getBooleanExtra(CalibrarTaraActivity.EXTRA_ES_CALIBRADA, false)
 
         configurarHeader()
         configurarEscanerFotocheck()
@@ -35,8 +46,24 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         configurarTecladoPesaje()
         configurarBotonGuardar()
 
-        // Estado inicial "Esperando Escaneo"
-        limpiarCampos()
+        if (savedInstanceState != null) {
+            // Restaurar estado previo a la rotación
+            entradaPesoBruto = savedInstanceState.getString(KEY_ENTRADA_PESO) ?: ""
+            cantidadJabas = savedInstanceState.getInt(KEY_CANTIDAD_JABAS, 0)
+            val jornalero = BundleCompat.getSerializable(savedInstanceState, KEY_JORNALERO, Jornalero::class.java)
+            jornalero?.let { mostrarJornalero(it) }
+            actualizarCalculos()
+        } else {
+            // Estado inicial "Esperando Escaneo"
+            limpiarCampos()
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putSerializable(KEY_JORNALERO, jornaleroActual)
+        outState.putString(KEY_ENTRADA_PESO, entradaPesoBruto)
+        outState.putInt(KEY_CANTIDAD_JABAS, cantidadJabas)
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -76,15 +103,18 @@ class RegistrarPesajeActivity : AppCompatActivity() {
             codigoQr = "QR_FOTOCHECK_004",
             cuadrillaCodigo = "CUA-01"
         )
-        jornaleroActual = demo
-
-        binding.tvNombreJornaleroPesaje.text = "Fotocheck identificado: ${demo.nombreCompleto}"
-        binding.tvEstadoAsistenciaJornalero.text = "✓ Asistencia registrada (Cuadrilla ${demo.cuadrillaCodigo})"
+        mostrarJornalero(demo)
 
         // Pre-cargar valores de muestra inicial sugeridos (9.50 kg y 4 jabas)
         entradaPesoBruto = "9.50"
         cantidadJabas = 4
         actualizarCalculos()
+    }
+
+    private fun mostrarJornalero(jornalero: Jornalero) {
+        jornaleroActual = jornalero
+        binding.tvNombreJornaleroPesaje.text = "Fotocheck identificado: ${jornalero.nombreCompleto}"
+        binding.tvEstadoAsistenciaJornalero.text = "✓ Asistencia registrada (Cuadrilla ${jornalero.cuadrillaCodigo})"
     }
 
     private fun configurarBotonesJabas() {
@@ -177,9 +207,9 @@ class RegistrarPesajeActivity : AppCompatActivity() {
             val acumuladoActual = viewModel.acumuladoDiario.value ?: 45.50
 
             val intent = Intent(this, ConfirmacionActivity::class.java).apply {
-                putExtra("EXTRA_PESO_NETO", netoCalculado)
-                putExtra("EXTRA_ACUMULADO_DIARIO", acumuladoActual)
-                putExtra("EXTRA_ES_TARA_CALIBRADA", esTaraCalibrada)
+                putExtra(EXTRA_PESO_NETO, netoCalculado)
+                putExtra(EXTRA_ACUMULADO_DIARIO, acumuladoActual)
+                putExtra(EXTRA_ES_TARA_CALIBRADA, esTaraCalibrada)
             }
             startActivity(intent)
         }
