@@ -110,13 +110,6 @@ class TurnoViewModel(private val state: SavedStateHandle) : ViewModel() {
         state[KEY_PARIHUELA_ABIERTA] = abierta
     }
 
-    fun toggleParihuela(): Boolean {
-        val actual = state.get<Boolean>(KEY_PARIHUELA_ABIERTA) ?: false
-        val nuevo = !actual
-        state[KEY_PARIHUELA_ABIERTA] = nuevo
-        return nuevo
-    }
-
     fun buscarJornaleroPorUltimosDigitosDni(ultimosDigitos: String): List<Jornalero> {
         if (ultimosDigitos.isBlank()) return emptyList()
         return listaMockJornaleros.filter { it.dni.endsWith(ultimosDigitos) || it.dni.contains(ultimosDigitos) }
