@@ -4,6 +4,8 @@ import android.content.Context
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 
@@ -64,7 +66,9 @@ object FeedbackUtil {
         try {
             val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
             toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 200)
-            toneGen.release()
+            Handler(Looper.getMainLooper()).postDelayed({
+                toneGen.release()
+            }, 250)
         } catch (_: Exception) {
         }
     }
@@ -76,7 +80,9 @@ object FeedbackUtil {
         try {
             val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90)
             toneGen.startTone(ToneGenerator.TONE_PROP_NACK, 250)
-            toneGen.release()
+            Handler(Looper.getMainLooper()).postDelayed({
+                toneGen.release()
+            }, 300)
         } catch (_: Exception) {
         }
     }
