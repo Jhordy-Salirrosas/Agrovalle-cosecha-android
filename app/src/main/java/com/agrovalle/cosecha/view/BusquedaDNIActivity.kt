@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.os.BundleCompat
 import com.agrovalle.cosecha.databinding.ActivityBusquedaDniBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.viewmodel.TurnoViewModel
@@ -27,6 +26,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
         private const val KEY_JORNALERO = "key_jornalero"
     }
 
+    @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBusquedaDniBinding.inflate(layoutInflater)
@@ -34,7 +34,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
 
         if (savedInstanceState != null) {
             digitosIngresados = savedInstanceState.getString(KEY_DIGITOS) ?: ""
-            jornaleroEncontrado = BundleCompat.getSerializable(savedInstanceState, KEY_JORNALERO, Jornalero::class.java)
+            jornaleroEncontrado = savedInstanceState.getSerializable(KEY_JORNALERO) as? Jornalero
         }
 
         configurarTeclado()

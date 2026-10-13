@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.os.BundleCompat
 import com.agrovalle.cosecha.databinding.ActivityRegistrarPesajeBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.util.FeedbackUtil
@@ -32,6 +31,7 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         private const val KEY_CANTIDAD_JABAS = "key_cantidad_jabas"
     }
 
+    @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityRegistrarPesajeBinding.inflate(layoutInflater)
@@ -50,7 +50,7 @@ class RegistrarPesajeActivity : AppCompatActivity() {
             // Restaurar estado previo a la rotación
             entradaPesoBruto = savedInstanceState.getString(KEY_ENTRADA_PESO) ?: ""
             cantidadJabas = savedInstanceState.getInt(KEY_CANTIDAD_JABAS, 0)
-            val jornalero = BundleCompat.getSerializable(savedInstanceState, KEY_JORNALERO, Jornalero::class.java)
+            val jornalero = savedInstanceState.getSerializable(KEY_JORNALERO) as? Jornalero
             jornalero?.let { mostrarJornalero(it) }
             actualizarCalculos()
         } else {
