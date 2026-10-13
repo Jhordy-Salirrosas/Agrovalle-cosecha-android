@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="16dp"
+    tools:context=".view.BusquedaDNIActivity">
+
+    <!-- Header con botón volver -->
+    <LinearLayout
+        android:id="@+id/layoutHeaderDni"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnVolverDni"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Volver"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Buscar Jornalero por DNI"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Display de Dígitos DNI -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardDisplayDni"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="2dp"
+        app:strokeColor="@color/card_border"
+        app:strokeWidth="1dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeaderDni">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ingrese_ultimos_4"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvDisplayDni"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:letterSpacing="0.2"
+                android:text="____"
+                android:textColor="@color/verde_agricola"
+                android:textSize="32sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Tarjeta de Resultado de Búsqueda -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardResultado"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="2dp"
+        app:strokeColor="@color/verde_agricola"
+        app:strokeWidth="1.5dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/cardDisplayDni"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <TextView
+                android:id="@+id/tvNombreJornalero"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Juan Pérez Sánchez"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDniCompleto"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="DNI: 12345678 • Cuadrilla CUA-01"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConfirmarAsistencia"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:text="@string/confirmar_asistencia"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/verde_agricola"
+                app:cornerRadius="10dp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <TextView
+        android:id="@+id/tvEstadoVacio"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Ingrese dígitos y presione Buscar"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/cardDisplayDni" />
+
+    <!-- Teclado Numérico de Botones Grandes -->
+    <GridLayout
+        android:id="@+id/gridTeclado"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:alignmentMode="alignMargins"
+        android:columnCount="3"
+        android:rowCount="4"
+        app:layout_constraintBottom_toTopOf="@id/tvFooterOfflineDni"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Fila 1 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey1"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="1"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey2"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="2"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey3"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="3"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <!-- Fila 2 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey4"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="4"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey5"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="5"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey6"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="6"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <!-- Fila 3 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey7"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="7"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey8"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="8"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey9"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="9"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <!-- Fila 4 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKeyClear"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="C"
+            android:textColor="@color/color_error"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKey0"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:text="0"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnKeyBuscar"
+            android:layout_width="0dp"
+            android:layout_height="62dp"
+            android:layout_columnWeight="1"
+            android:layout_margin="4dp"
+            android:enabled="false"
+            android:text="@string/buscar"
+            android:textColor="@color/white"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/verde_agricola"
+            app:cornerRadius="12dp" />
+    </GridLayout>
+
+    <!-- Footer Sin Conexión -->
+    <TextView
+        android:id="@+id/tvFooterOfflineDni"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/sin_conexion"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

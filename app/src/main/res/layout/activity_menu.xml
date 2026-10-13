@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="20dp"
+    tools:context=".view.MenuActivity">
+
+    <!-- Tarjeta informativa del operador -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardOperadorInfo"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="2dp"
+        app:strokeColor="@color/card_border"
+        app:strokeWidth="1dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tvTituloMenu"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/menu_principal"
+                android:textColor="@color/verde_agricola"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvRolActivo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Operador: Capataz de Cuadrilla"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDetalleTurno"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Jornada Mañana • Fundo Principal Virú"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Scrollview para botones modulares -->
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toTopOf="@id/btnCerrarTurno"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/cardOperadorInfo">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Grupo Capataz -->
+            <LinearLayout
+                android:id="@+id/layoutOpcionesCapataz"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="MÓDULO DE ASISTENCIA"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- Botón Registrar Asistencia QR -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRegistrarAsistencia"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginBottom="14dp"
+                    android:gravity="center_vertical|start"
+                    android:paddingStart="24dp"
+                    android:text="@string/registrar_asistencia"
+                    android:textColor="@color/white"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/verde_agricola"
+                    app:cornerRadius="16dp"
+                    app:icon="@drawable/ic_qr_code"
+                    app:iconGravity="textStart"
+                    app:iconPadding="16dp"
+                    app:iconSize="28dp"
+                    app:iconTint="@color/white" />
+
+                <!-- Botón Buscar por DNI -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBuscarDni"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginBottom="14dp"
+                    android:gravity="center_vertical|start"
+                    android:paddingStart="24dp"
+                    android:text="@string/buscar_por_dni"
+                    android:textColor="@color/verde_agricola"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/white"
+                    app:cornerRadius="16dp"
+                    app:strokeColor="@color/verde_agricola"
+                    app:strokeWidth="2dp" />
+            </LinearLayout>
+
+            <!-- Grupo Asistente de Pesaje -->
+            <LinearLayout
+                android:id="@+id/layoutOpcionesAsistente"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="MÓDULO DE PESAJE EN CAMPO"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- Botón Contexto Agronómico -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnContextoTurno"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginBottom="14dp"
+                    android:gravity="center_vertical|start"
+                    android:paddingStart="24dp"
+                    android:text="@string/contexto_turno"
+                    android:textColor="@color/verde_agricola"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/white"
+                    app:cornerRadius="16dp"
+                    app:strokeColor="@color/verde_agricola"
+                    app:strokeWidth="2dp" />
+
+                <!-- Botón Registrar Pesaje -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRegistrarPesaje"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginBottom="14dp"
+                    android:gravity="center_vertical|start"
+                    android:paddingStart="24dp"
+                    android:text="@string/registrar_pesaje"
+                    android:textColor="@color/white"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/verde_agricola"
+                    app:cornerRadius="16dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Botón Cerrar Turno -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCerrarTurno"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:text="@string/cerrar_turno"
+        android:textColor="@color/color_error"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/white"
+        app:cornerRadius="14dp"
+        app:strokeColor="@color/color_error"
+        app:strokeWidth="1.5dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

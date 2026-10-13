@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="20dp"
+    tools:context=".view.ConfirmacionActivity">
+
+    <!-- Header con botón cerrar (X) -->
+    <LinearLayout
+        android:id="@+id/layoutHeaderConfirmacion"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/pesaje_registrado"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnCerrarX"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Cerrar y volver al Menú"
+            android:src="@drawable/ic_close"
+            app:tint="@color/text_primary" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toTopOf="@id/layoutAccionesConfirmacion"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeaderConfirmacion">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <!-- Ícono grande de estado (Check verde o Advertencia amarilla) -->
+            <ImageView
+                android:id="@+id/ivIconoEstado"
+                android:layout_width="88dp"
+                android:layout_height="88dp"
+                android:layout_marginTop="12dp"
+                android:contentDescription="Estado de Pesaje"
+                android:src="@drawable/ic_check_circle" />
+
+            <TextView
+                android:id="@+id/tvTituloEstado"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/pesaje_exitoso"
+                android:textColor="@color/color_success"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvMensajeEstado"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="El registro se guardó correctamente en el dispositivo"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+
+            <!-- Indicador Sensorial -->
+            <LinearLayout
+                android:id="@+id/layoutFeedbackIndicador"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/bg_scanner_frame"
+                android:backgroundTint="@color/verde_suave"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="8dp">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:contentDescription="Sonido"
+                    android:src="@drawable/ic_volume_up"
+                    app:tint="@color/verde_agricola" />
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="Vibración"
+                    android:src="@drawable/ic_vibration"
+                    app:tint="@color/verde_agricola" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Sonido y vibración activados"
+                    android:textColor="@color/verde_agricola"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Recuadro Destacado: PESO NETO -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardPesoNetoConfirmado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/verde_agricola"
+                app:strokeWidth="1.5dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/peso_neto"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvPesoNetoValor"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="8.00 kg"
+                        android:textColor="@color/verde_agricola"
+                        android:textSize="36sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Recuadro Destacado: ACUMULADO DIARIO -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardAcumuladoDiario"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/card_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/acumulado_diario"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvAcumuladoDiarioValor"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="45.50 kg"
+                        android:textColor="@color/text_primary"
+                        android:textSize="26sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Botonera Inferior -->
+    <LinearLayout
+        android:id="@+id/layoutAccionesConfirmacion"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/tvFooterOfflineConfirmacion"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Botón Siguiente Jornalero -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSiguienteJornalero"
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            android:text="Siguiente Jornalero  ➔"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/verde_agricola"
+            app:cornerRadius="14dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Volver a la pantalla de pesaje"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Footer Sin Conexión -->
+    <TextView
+        android:id="@+id/tvFooterOfflineConfirmacion"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="@string/sin_conexion"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

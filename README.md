@@ -1,135 +1,115 @@
-# AgroValle Cosecha - Sprint 1
+# AgroValle Cosecha - Sprint 1 (Coder 2: UI & Navegación)
 
-## 📱 Descripción
+## 📱 Descripción del Proyecto
 
-**AgroValle Cosecha** es una aplicación móvil Android para el control de cosecha de arándanos en campo. Permite registrar asistencia de jornaleros (por QR o DNI), gestionar el contexto agronómico (cuartel, CLP, variedad), calibrar la tara de jabas vacías y registrar pesajes con cálculo automático de peso neto.
+**AgroValle Cosecha** es un sistema móvil desarrollado para la empresa agroindustrial AgroValle en Virú/Chao (La Libertad, Perú), diseñado para el registro ágil de asistencia y pesaje de jabas de arándano en condiciones de campo sin conectividad (offline-first).
 
-## 🛠️ Stack Tecnológico
+Esta rama (`feature/ui-navegacion`) contiene la implementación exclusiva del rol **Coder 2**, enfocado en la interfaz gráfica tradicional basada en **XML Layouts**, navegación mediante **Intents explícitos**, **ViewBinding** y persistencia de estado ante rotación con **ViewModel + SavedStateHandle**.
 
-| Componente | Tecnología |
-|---|---|
-| Lenguaje | Kotlin |
-| UI | Jetpack Compose (Material 3) |
-| Navegación | Navigation Compose |
-| Arquitectura | MVVM (ViewModel + StateFlow) |
-| Persistencia | Room (entidades y DAOs preparados, mock en Sprint 1) |
-| Lectura QR | CameraX + ML Kit (placeholder simulado) |
-| Feedback | ToneGenerator + Vibrator |
-| SDK Mínimo | API 24 (Android 7.0) |
+---
 
-## 📂 Estructura del Proyecto
+## 🏛️ Restricciones y Arquitectura Cumplidas (Cero Tolerancia)
+
+1. **PROHIBIDO Jetpack Compose**: Implementación 100% nativa en XML clásico con Material Components (`MaterialButton`, `MaterialCardView`, `ConstraintLayout`, `GridLayout`).
+2. **PROHIBIDO Navigation Component**: Navegación desacoplada exclusivamente mediante `Intent` explícitos entre las 8 Activities.
+3. **PROHIBIDO Room / SQLite**: Modelos base desacoplados preparados en stubs listos para la integración con Coder 1.
+4. **PROHIBIDO CameraX / ML Kit**: Placeholder visual de visor (`FrameLayout` con marco y vector QR) simulando escaneo táctil de fotochecks.
+5. **OBLIGATORIO ViewBinding**: Activado en `build.gradle.kts` e implementado en cada Activity (`ActivityXBinding.inflate(layoutInflater)`).
+6. **OBLIGATORIO ViewModel con SavedStateHandle**: `TurnoViewModel` retiene roles, jornadas, conteo de asistencia, tara y acumulado diario sobreviviendo a recreaciones de pantalla por rotación.
+7. **SDK Mínimo**: API 24 (Android 7.0), compilado para API 34.
+
+---
+
+## 📂 Estructura del Código Fuente
 
 ```
-com.agrovalle.cosecha/
-├── AgroValleApp.kt                    # Application class
-├── MainActivity.kt                     # Single Activity (Compose host)
-├── navigation/
-│   ├── Screen.kt                      # Rutas tipadas
-│   └── NavGraph.kt                    # Grafo de navegación
-├── data/
-│   ├── model/
-│   │   └── Models.kt                  # Modelos de dominio y enums
-│   ├── local/
-│   │   ├── AgroValleDatabase.kt       # Room Database
-│   │   ├── entities/                  # Entidades Room (6 archivos)
-│   │   └── dao/                       # DAOs Room (5 archivos)
-│   └── repository/
-│       ├── AgroValleRepository.kt     # Interfaz del repositorio
-│       └── MockAgroValleRepository.kt # Implementación mock
-├── ui/
-│   ├── theme/
-│   │   ├── Color.kt                   # Paleta de alto contraste
-│   │   ├── Type.kt                    # Tipografía grande
-│   │   └── Theme.kt                   # Tema Material 3
-│   ├── components/                    # Componentes reutilizables
-│   │   ├── BigButton.kt               # Botones (Primary, Dark, Outlined, Small)
-│   │   ├── DropdownSelector.kt        # Selector desplegable
-│   │   ├── NumericKeypad.kt           # Teclado numérico táctil
-│   │   ├── QRScannerPlaceholder.kt    # Visor QR simulado
-│   │   ├── ProgressSteps.kt           # Indicador de 5 pasos
-│   │   ├── OfflineFooter.kt           # Footer "Sin conexión"
-│   │   └── HeaderBar.kt              # Barra superior con volver/cerrar
-│   ├── screens/                       # 8 pantallas del Sprint 1
-│   │   ├── LoginScreen.kt
-│   │   ├── MainMenuScreen.kt
-│   │   ├── AttendanceQRScreen.kt
-│   │   ├── SearchByDNIScreen.kt
-│   │   ├── AgronomicContextScreen.kt
-│   │   ├── TareCalibrationScreen.kt
-│   │   ├── WeighingScreen.kt
-│   │   └── WeighingConfirmationScreen.kt
-│   └── viewmodels/                    # ViewModels con StateFlow
-│       ├── AuthViewModel.kt
-│       ├── AttendanceViewModel.kt
-│       ├── HarvestContextViewModel.kt
-│       ├── TareCalibrationViewModel.kt
-│       └── WeighingViewModel.kt
+app/src/main/java/com/agrovalle/cosecha/
+├── model/                               # Entidades base (stubs desacoplados)
+│   ├── Jornalero.kt
+│   ├── Asistencia.kt
+│   ├── Parihuela.kt
+│   ├── Pesaje.kt
+│   └── CalibracionTara.kt
+├── viewmodel/
+│   └── TurnoViewModel.kt                # SavedStateHandle (sobrevive rotación de pantalla)
+├── view/                                # 8 Activities del Sprint 1
+│   ├── LoginActivity.kt                 # 1. Configuración de turno (Launcher)
+│   ├── MenuActivity.kt                  # 2. Menú modular por rol (Capataz / Asistente)
+│   ├── AsistenciaQRActivity.kt          # 3. Visor QR y contador de cuadrilla (0/35)
+│   ├── BusquedaDNIActivity.kt           # 4. Teclado numérico táctil y búsqueda manual
+│   ├── ContextoAgronomicoActivity.kt    # 5. Cuartel, CLP, Variedad y apertura de parihuela
+│   ├── CalibrarTaraActivity.kt          # 6. Muestreo de 5 jabas y promedio de tara
+│   ├── RegistrarPesajeActivity.kt       # 7. Peso bruto, jabas (+1, +4, +6) y peso neto
+│   └── ConfirmacionActivity.kt          # 8. Confirmación con feedback sensorial
 └── util/
-    └── SonidoVibracionHelper.kt       # Feedback sonoro y háptico
+    └── FeedbackUtil.kt                  # Sonido (ToneGenerator) y vibración (Vibrator)
+
+app/src/main/res/layout/
+├── activity_login.xml
+├── activity_menu.xml
+├── activity_asistencia_qr.xml
+├── activity_busqueda_dni.xml
+├── activity_contexto.xml
+├── activity_calibrar_tara.xml
+├── activity_registrar_pesaje.xml
+└── activity_confirmacion.xml
 ```
 
-## 🚀 Cómo Ejecutar
+---
 
-### Prerrequisitos
-- Android Studio Hedgehog (2023.1.1) o superior
-- JDK 17
-- SDK de Android API 34 instalado
+## 🔄 Flujo de Navegación y Pantallas
 
-### Pasos
+```mermaid
+graph TD
+    A[1. LoginActivity] -->|Intent con Rol| B[2. MenuActivity]
+    B -->|Capataz: Registrar Asistencia| C[3. AsistenciaQRActivity]
+    B -->|Capataz: Buscar por DNI| D[4. BusquedaDNIActivity]
+    C -->|Botón Buscar DNI| D
+    D -->|setResult / finish| C
+    B -->|Asistente: Contexto del Turno| E[5. ContextoAgronomicoActivity]
+    E -->|Abrir Parihuela| F[6. CalibrarTaraActivity]
+    B -->|Asistente: Registrar Pesaje| G[7. RegistrarPesajeActivity]
+    F -->|Confirmar u Omitir Tara| G
+    G -->|Guardar Pesaje| H[8. ConfirmacionActivity]
+    H -->|Siguiente Jornalero| G
+    H -->|Cerrar X| B
+    B -->|Cerrar Turno| A
+```
 
-1. **Clonar el repositorio:**
+---
+
+## 🎨 Paleta de Colores y Recursos
+- **Verde Agrícola**: `#1E4D2B`
+- **Verde Oscuro**: `#14361E`
+- **Verde Claro / Acento**: `#A3D9B1`
+- **Verde Fondo Suave**: `#E8F5E9`
+- **Fondo de la App**: `#F8FAF9`
+- **Alerta / Tara por Defecto**: `#F57C00` / `#FFFDE7`
+
+---
+
+## 🚀 Pasos para Ejecutar y Probar
+
+1. **Clonar y situarse en la rama**:
    ```bash
-   git clone <url-del-repo>
-   cd Agrovalle-cosecha-android
-   git checkout feature/sprint-1-implementacion
+   git checkout feature/ui-navegacion
    ```
 
-2. **Abrir en Android Studio:**
-   - File → Open → Seleccionar la carpeta del proyecto
-   - Esperar a que Gradle sincronice (puede tardar la primera vez)
+2. **Compilar el proyecto**:
+   ```bash
+   ./gradlew assembleDebug
+   ```
 
-3. **Ejecutar la app:**
-   - Conectar un dispositivo Android (API 24+) o iniciar un emulador
-   - Click en Run ▶️ o `Shift + F10`
+3. **Instalar en emulador o dispositivo físico**:
+   ```bash
+   ./gradlew installDebug
+   ```
 
-## 🧪 Flujos de Prueba
-
-### Flujo Capataz
-1. En Login, seleccionar **Capataz** → Jornada → Fundo → Sector → "Iniciar Turno"
-2. En Menú Principal, pulsar **"Registrar Asistencia"**
-3. Pulsar **"Escanear QR"** varias veces → el contador se incrementa
-4. Pulsar **"Buscar por DNI"** → ingresar `1234` → "Buscar" → "Confirmar Asistencia"
-5. Verificar que el contador se actualiza al volver
-
-### Flujo Asistente de Pesaje
-1. En Login, seleccionar **Asistente de Pesaje** → completar campos → "Iniciar Turno"
-2. Pulsar **"Contexto Agronómico"** → seleccionar Cuartel, CLP, Variedad → "Abrir Parihuela"
-3. Volver y pulsar **"Calibrar Tara"** → registrar 5 pesos → "Confirmar Calibración" (o "Omitir")
-4. Volver y pulsar **"Registrar Pesaje"** → "Simular Escaneo" → ingresar peso (ej: 9.50) → agregar jabas (+4) → verificar cálculo → "Guardar Pesaje"
-5. En Confirmación: verificar check verde (o ⚠️ si tara por defecto) → "Siguiente Jornalero →"
-6. Verificar que los campos se limpiaron para el siguiente registro
-
-## 📋 Datos Mock
-
-| Jornalero | DNI | Código QR |
-|---|---|---|
-| Juan Pérez | 1234 | QR-001 |
-| María López | 5678 | QR-002 |
-| Pedro García | 9012 | QR-003 |
-
-- **Tara por defecto:** 0.375 kg
-- **Acumulado diario inicial:** 45.50 kg
-- **Total cuadrilla:** 35 trabajadores
-
-## 🔧 Notas para Coder 1 (Room)
-
-Para reemplazar el MockRepository por Room:
-
-1. Inicializar `AgroValleDatabase` en `AgroValleApp.kt`
-2. Crear `RoomAgroValleRepository` implementando `AgroValleRepository`
-3. Cambiar la instanciación en `MainActivity.kt` (o usar Hilt/Koin)
-4. Las entidades y DAOs ya están definidos y listos para usar
-
-## 📄 Licencia
-
-Proyecto académico - UPAO 2026
+4. **Flujo de prueba recomendado**:
+   - **Login**: Seleccionar "Capataz de Cuadrilla", presionar "Iniciar Turno".
+   - **Asistencia**: Pulsar "Registrar Asistencia". Tocar "Escanear QR" para verificar incremento del contador (0/35 -> 1/35) y vibración háptica.
+   - **Búsqueda DNI**: Pulsar "Buscar por DNI", usar el teclado numérico ingresando `1234` y presionar "Buscar" -> "Confirmar Asistencia".
+   - **Contexto**: Regresar al Menú, cambiar rol o acceder a "Contexto del Turno". Seleccionar Cuartel, CLP y Variedad Biloxi para habilitar "Abrir Parihuela".
+   - **Calibrar Tara**: Registrar las 5 muestras para habilitar "Confirmar Calibración", o presionar "Omitir y Usar Tara 0.375 kg".
+   - **Registrar Pesaje**: Tocar el visor para identificar al jornalero Luis Pérez. Ajustar jabas con los botones rápidos `+1`, `+4`, `+6`. Observar el cálculo de Peso Neto en tiempo real. Presionar "Guardar Pesaje".
+   - **Confirmación**: Se activa sonido y vibración haptic. Presionar "Siguiente Jornalero" para limpiar campos y continuar.

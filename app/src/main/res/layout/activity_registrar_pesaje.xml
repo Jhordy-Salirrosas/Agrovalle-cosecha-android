@@ -1,0 +1,550 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="16dp"
+    tools:context=".view.RegistrarPesajeActivity">
+
+    <!-- Header con botón volver -->
+    <LinearLayout
+        android:id="@+id/layoutHeaderPesaje"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnVolverPesaje"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Volver"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="Registrar Pesaje"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <!-- Chip Indicador de Tara -->
+        <TextView
+            android:id="@+id/tvChipTara"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_scanner_frame"
+            android:backgroundTint="@color/verde_suave"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:text="Tara: 0.375 kg"
+            android:textColor="@color/verde_agricola"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/layoutBotoneraPesaje"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeaderPesaje">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Visor QR Pequeño / Identificación de Jornalero -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardJornaleroPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="1dp"
+                app:strokeColor="@color/card_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <FrameLayout
+                        android:id="@+id/btnEscanearFotocheck"
+                        android:layout_width="52dp"
+                        android:layout_height="52dp"
+                        android:background="@drawable/bg_scanner_frame"
+                        android:backgroundTint="@color/verde_suave">
+
+                        <ImageView
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:layout_gravity="center"
+                            android:contentDescription="Escanear Fotocheck"
+                            android:src="@drawable/ic_qr_code"
+                            app:tint="@color/verde_agricola" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvNombreJornaleroPesaje"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Escanea el fotocheck para comenzar"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvEstadoAsistenciaJornalero"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Esperando escaneo..."
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Card de Campos de Pesaje (Peso Bruto y Jabas) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardCamposPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/card_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <!-- Fila Peso Bruto -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/peso_bruto_kg"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_scanner_frame"
+                        android:backgroundTint="@color/verde_suave"
+                        android:gravity="center_vertical"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp">
+
+                        <TextView
+                            android:id="@+id/tvPesoBrutoValor"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="0.00"
+                            android:textColor="@color/verde_agricola"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="kg"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- Sección Cantidad de Jabas -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/cantidad_jabas"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvCantidadJabas"
+                            android:layout_width="60dp"
+                            android:layout_height="50dp"
+                            android:background="@drawable/bg_scanner_frame"
+                            android:backgroundTint="@color/verde_suave"
+                            android:gravity="center"
+                            android:text="0"
+                            android:textColor="@color/text_primary"
+                            android:textSize="22sp"
+                            android:textStyle="bold" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnJabaMenos1"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:text="-1"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            app:cornerRadius="8dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnJabaMas1"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="+1"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            app:cornerRadius="8dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnJabaMas4"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="+4"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            app:cornerRadius="8dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnJabaMas6"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="50dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="+6"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
+
+                    <!-- Textos informativos de tara aplicada -->
+                    <TextView
+                        android:id="@+id/tvTaraAplicada"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Tara aplicada: 0.375 kg por jaba"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvTaraTotalCalculada"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Tara total: 0.00 kg (0 x 0.375)"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="10dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="@color/divider_color" />
+
+                    <!-- Recuadro Destacado: Peso Neto Calculado -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@color/verde_suave"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PESO NETO:"
+                            android:textColor="@color/verde_oscuro"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvPesoNetoResultado"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0.00 kg"
+                            android:textColor="@color/verde_agricola"
+                            android:textSize="28sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvFormulaCalculo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="0.00 - 0.00 = 0.00 kg"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Teclado Numérico Compacto para Peso Bruto -->
+            <GridLayout
+                android:id="@+id/gridTecladoPesaje"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:alignmentMode="alignMargins"
+                android:columnCount="3"
+                android:rowCount="4">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP1"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="1"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP2"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="2"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP3"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="3"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP4"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="4"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP5"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="5"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP6"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="6"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP7"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="7"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP8"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="8"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP9"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="9"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPDot"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="."
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnP0"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="0"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPClear"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_columnWeight="1"
+                    android:layout_margin="3dp"
+                    android:text="C"
+                    android:textColor="@color/color_error"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+            </GridLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Barra Inferior: Botón Guardar Pesaje y Feedback -->
+    <LinearLayout
+        android:id="@+id/layoutBotoneraPesaje"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/tvFooterOfflinePesaje"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Botón Guardar Pesaje (Negro/Verde Oscuro Grande) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGuardarPesaje"
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            android:enabled="false"
+            android:text="@string/guardar_pesaje"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/black"
+            app:cornerRadius="14dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="Al guardar, la pantalla se limpia para el siguiente jornalero en menos de 10 segundos."
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Footer Sin Conexión -->
+    <TextView
+        android:id="@+id/tvFooterOfflinePesaje"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="@string/sin_conexion"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

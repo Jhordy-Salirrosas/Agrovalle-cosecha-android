@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="16dp"
+    tools:context=".view.CalibrarTaraActivity">
+
+    <!-- Header con botón volver -->
+    <LinearLayout
+        android:id="@+id/layoutHeaderTara"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnVolverTara"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Volver"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Calibración de Tara"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/layoutAccionesTara"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeaderTara">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Indicador visual de 5 pasos -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Progreso de Calibración (Muestreo de 5 Jabas)"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:id="@+id/layoutPasos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvPaso1"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_margin="4dp"
+                    android:background="@drawable/bg_scanner_frame"
+                    android:backgroundTint="@color/verde_agricola"
+                    android:gravity="center"
+                    android:text="1"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvPaso2"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_margin="4dp"
+                    android:background="@drawable/bg_scanner_frame"
+                    android:backgroundTint="@color/card_border"
+                    android:gravity="center"
+                    android:text="2"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvPaso3"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_margin="4dp"
+                    android:background="@drawable/bg_scanner_frame"
+                    android:backgroundTint="@color/card_border"
+                    android:gravity="center"
+                    android:text="3"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvPaso4"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_margin="4dp"
+                    android:background="@drawable/bg_scanner_frame"
+                    android:backgroundTint="@color/card_border"
+                    android:gravity="center"
+                    android:text="4"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvPaso5"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_margin="4dp"
+                    android:background="@drawable/bg_scanner_frame"
+                    android:backgroundTint="@color/card_border"
+                    android:gravity="center"
+                    android:text="5"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Card de Registro de la Jaba Actual -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/card_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/tvInstruccionJaba"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Coloque la Jaba 1 vacía en la balanza"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvPesoMuestra"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="0.375 kg"
+                        android:textColor="@color/verde_agricola"
+                        android:textSize="36sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnMenosPeso"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="56dp"
+                            android:layout_height="48dp"
+                            android:text="-0.005"
+                            android:textSize="10sp"
+                            app:cornerRadius="8dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnMasPeso"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="56dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="8dp"
+                            android:text="+0.005"
+                            android:textSize="10sp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRegistrarPesoJaba"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/registrar_peso_jaba"
+                        android:textColor="@color/white"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/verde_agricola"
+                        app:cornerRadius="12dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Card de Resumen de Promedio -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@color/verde_suave"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/verde_claro"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tara Promedio Calculada:"
+                        android:textColor="@color/verde_oscuro"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvPromedioCalculado"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="-- kg"
+                        android:textColor="@color/verde_agricola"
+                        android:textSize="26sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvDetalleMuestras"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Muestras registradas: 0 de 5"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Botones de Acción Inferiores -->
+    <LinearLayout
+        android:id="@+id/layoutAccionesTara"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/tvFooterOfflineTara"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Confirmar Calibración -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnConfirmarCalibracion"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginBottom="8dp"
+            android:enabled="false"
+            android:text="@string/confirmar_calibracion"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/verde_agricola"
+            app:cornerRadius="12dp" />
+
+        <!-- Omitir y Usar Tara 0.375 kg -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOmitirCalibracion"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/omitir_calibracion"
+            android:textColor="@color/color_warning"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/white"
+            app:cornerRadius="12dp"
+            app:strokeColor="@color/color_warning"
+            app:strokeWidth="1.5dp" />
+    </LinearLayout>
+
+    <!-- Footer Sin Conexión -->
+    <TextView
+        android:id="@+id/tvFooterOfflineTara"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="@string/sin_conexion"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

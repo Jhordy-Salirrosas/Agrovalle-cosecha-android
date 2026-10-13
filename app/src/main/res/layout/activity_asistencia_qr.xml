@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="16dp"
+    tools:context=".view.AsistenciaQRActivity">
+
+    <!-- Header con botón volver y contador -->
+    <LinearLayout
+        android:id="@+id/layoutHeaderAsistencia"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnVolver"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Volver"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="Asistencia QR"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <!-- Badge Contador Cuadrilla -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/verde_agricola"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp">
+
+            <TextView
+                android:id="@+id/tvContadorCuadrilla"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="14dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="6dp"
+                android:text="0 / 35"
+                android:textColor="@color/white"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+
+    <!-- Recuadro central simulando visor de escáner QR -->
+    <FrameLayout
+        android:id="@+id/frameVisorCamara"
+        android:layout_width="0dp"
+        android:layout_height="280dp"
+        android:layout_marginTop="20dp"
+        android:background="@drawable/bg_scanner_frame"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeaderAsistencia">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <ImageView
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:alpha="0.85"
+                android:contentDescription="Placeholder QR"
+                android:src="@drawable/ic_qr_code"
+                app:tint="@color/verde_claro" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Apunte la cámara al fotocheck del jornalero"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvEstadoEscaneo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Visor activo (Simulación de escaneo continuo)"
+                android:textColor="@color/verde_claro"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Tarjeta de Último Registro -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardUltimoRegistro"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="2dp"
+        app:strokeColor="@color/card_border"
+        app:strokeWidth="1dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/frameVisorCamara">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <TextView
+                android:id="@+id/tvUltimoJornaleroRegistrado"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Esperando escaneo de fotocheck..."
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvDetalleRegistro"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="Presione \'Escanear QR\' o \'Buscar por DNI\'"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Botón Primario: Escanear QR -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnEscanearQr"
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:layout_marginBottom="12dp"
+        android:text="@string/escanear_qr"
+        android:textColor="@color/white"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/verde_agricola"
+        app:cornerRadius="14dp"
+        app:icon="@drawable/ic_qr_code"
+        app:iconGravity="textStart"
+        app:iconTint="@color/white"
+        app:layout_constraintBottom_toTopOf="@id/btnBuscarPorDni"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Botón Secundario: Buscar por DNI -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnBuscarPorDni"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginBottom="12dp"
+        android:text="@string/buscar_por_dni"
+        android:textColor="@color/verde_agricola"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/white"
+        app:cornerRadius="14dp"
+        app:strokeColor="@color/verde_agricola"
+        app:strokeWidth="2dp"
+        app:layout_constraintBottom_toTopOf="@id/tvFooterOffline"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Footer Sin Conexión -->
+    <TextView
+        android:id="@+id/tvFooterOffline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="@string/sin_conexion"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

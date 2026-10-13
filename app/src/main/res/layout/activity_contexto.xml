@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/fondo_app"
+    android:padding="16dp"
+    tools:context=".view.ContextoAgronomicoActivity">
+
+    <!-- Header con botón volver -->
+    <LinearLayout
+        android:id="@+id/layoutHeaderContexto"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageButton
+            android:id="@+id/btnVolverContexto"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Volver"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Contexto Agronómico"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
+        app:layout_constraintBottom_toTopOf="@id/btnAccionParihuela"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutHeaderContexto">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Banner Estado Parihuela -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardEstadoParihuela"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/verde_suave"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/verde_claro"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/tvEstadoParihuela"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Estado: PARIHUELA NO INICIADA"
+                        android:textColor="@color/verde_agricola"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvMarbeteInfo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Seleccione los parámetros agronómicos para habilitar el pesaje."
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Card de Parámetros -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/card_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <!-- Cuartel -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/cuartel"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <Spinner
+                        android:id="@+id/spnCuartel"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_scanner_frame"
+                        android:backgroundTint="@color/verde_suave"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp" />
+
+                    <!-- CLP -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/clp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <Spinner
+                        android:id="@+id/spnClp"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_scanner_frame"
+                        android:backgroundTint="@color/verde_suave"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp" />
+
+                    <!-- Variedad -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/variedad"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <RadioGroup
+                        android:id="@+id/rgVariedad"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="vertical">
+
+                        <RadioButton
+                            android:id="@+id/rbBiloxi"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Biloxi (Exportación Fresco)"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp" />
+
+                        <RadioButton
+                            android:id="@+id/rbVentura"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ventura (Calibre Grande)"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp" />
+                    </RadioGroup>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Botón Abrir / Cerrar Parihuela -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnAccionParihuela"
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:layout_marginBottom="8dp"
+        android:enabled="false"
+        android:text="@string/abrir_parihuela"
+        android:textColor="@color/white"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/verde_agricola"
+        app:cornerRadius="14dp"
+        app:layout_constraintBottom_toTopOf="@id/tvFooterOfflineContexto"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Footer Sin Conexión -->
+    <TextView
+        android:id="@+id/tvFooterOfflineContexto"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="@string/sin_conexion"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

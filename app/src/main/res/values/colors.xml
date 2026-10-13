@@ -1,13 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Colores de alto contraste para uso en campo (referencia XML) -->
-    <!-- La UI principal usa Compose con Color.kt -->
-    <color name="agro_background">#121212</color>
-    <color name="agro_primary">#FFC107</color>
-    <color name="agro_on_primary">#1E1E1E</color>
-    <color name="agro_surface">#1E1E1E</color>
-    <color name="agro_text_primary">#FFFFFF</color>
-    <color name="agro_success">#4CAF50</color>
-    <color name="agro_warning">#FF9800</color>
-    <color name="agro_error">#EF5350</color>
+    <!-- Colores institucionales AgroValle (Coder 2) -->
+    <color name="verde_agricola">#1E4D2B</color>
+    <color name="verde_oscuro">#14361E</color>
+    <color name="verde_claro">#A3D9B1</color>
+    <color name="verde_suave">#E8F5E9</color>
+    <color name="fondo_app">#F8FAF9</color>
+    
+    <!-- Colores del sistema y componentes -->
+    <color name="primary">#1E4D2B</color>
+    <color name="primary_variant">#14361E</color>
+    <color name="secondary">#A3D9B1</color>
+    <color name="background">#F8FAF9</color>
+    <color name="surface">#FFFFFF</color>
+    
+    <color name="text_primary">#1A1C19</color>
+    <color name="text_secondary">#5C635B</color>
+    <color name="text_hint">#8A9387</color>
+    
+    <color name="color_success">#2E7D32</color>
+    <color name="color_success_bg">#E8F5E9</color>
+    <color name="color_warning">#F57C00</color>
+    <color name="color_warning_bg">#FFF8E1</color>
+    <color name="color_error">#D32F2F</color>
+    
+    <!-- Alertas y estados -->
+    <color name="yellow_alert_bg">#FFFDE7</color>
+    <color name="yellow_alert_border">#FBC02D</color>
+    <color name="divider_color">#E0E4DE</color>
+    <color name="card_border">#D1D9D0</color>
+    
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="gray_light">#F0F2F0</color>
+    <color name="gray_scanner">#2A302A</color>
 </resources>

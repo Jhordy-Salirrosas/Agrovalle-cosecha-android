@@ -1,4 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">AgroValle Cosecha</string>
+    <string name="iniciar_turno">Iniciar Turno</string>
+    <string name="cerrar_turno">Cerrar Turno</string>
+    <string name="seleccionar_rol">Seleccionar Rol</string>
+    <string name="seleccionar_jornada">Seleccionar Jornada</string>
+    <string name="seleccionar_fundo">Seleccionar Fundo</string>
+    <string name="rol_capataz">Capataz de Cuadrilla</string>
+    <string name="rol_asistente">Asistente de Pesaje</string>
+    <string name="jornada_manana">Jornada Mañana (06:00 - 14:00)</string>
+    <string name="jornada_tarde">Jornada Tarde (14:00 - 22:00)</string>
+    <string name="fundo_viru">Fundo Principal Virú</string>
+    <string name="fundo_chao">Fundo Chao Norte</string>
+
+    <!-- Menú -->
+    <string name="menu_principal">Menú Principal</string>
+    <string name="registrar_asistencia">Registrar Asistencia</string>
+    <string name="buscar_por_dni">Buscar por DNI</string>
+    <string name="contexto_turno">Contexto del Turno</string>
+    <string name="registrar_pesaje">Registrar Pesaje</string>
+
+    <!-- Asistencia QR -->
+    <string name="escanear_qr">Escanear QR</string>
+    <string name="asistencia_registrada">Asistencia registrada con éxito</string>
+    <string name="sin_conexion">Sin conexión - Operando en modo local</string>
+
+    <!-- Búsqueda DNI -->
+    <string name="ingrese_ultimos_4">Ingrese los últimos 4 dígitos del DNI</string>
+    <string name="buscar">Buscar</string>
+    <string name="confirmar_asistencia">Confirmar Asistencia</string>
+
+    <!-- Contexto Agronómico -->
+    <string name="abrir_parihuela">Abrir Parihuela</string>
+    <string name="cerrar_parihuela">Cerrar Parihuela</string>
+    <string name="cuartel">Cuartel</string>
+    <string name="clp">CLP (Código Lugar Producción)</string>
+    <string name="variedad">Variedad de Arándano</string>
+
+    <!-- Calibrar Tara -->
+    <string name="calibrar_tara">Calibrar Tara</string>
+    <string name="registrar_peso_jaba">Registrar Peso de Jaba</string>
+    <string name="confirmar_calibracion">Confirmar Calibración</string>
+    <string name="omitir_calibracion">Omitir y Usar Tara 0.375 kg</string>
+
+    <!-- Pesaje -->
+    <string name="peso_bruto_kg">Peso Bruto (kg)</string>
+    <string name="cantidad_jabas">Cantidad de Jabas</string>
+    <string name="guardar_pesaje">Guardar Pesaje</string>
+    <string name="siguiente_jornalero">Siguiente Jornalero</string>
+
+    <!-- Confirmación -->
+    <string name="pesaje_registrado">Pesaje Registrado</string>
+    <string name="pesaje_exitoso">¡Pesaje Exitoso!</string>
+    <string name="peso_neto">PESO NETO</string>
+    <string name="acumulado_diario">ACUMULADO DIARIO</string>
+    <string name="tara_defecto_warning">Pesaje registrado con tara por defecto (0.375 kg). Se recomienda calibrar.</string>
 </resources>

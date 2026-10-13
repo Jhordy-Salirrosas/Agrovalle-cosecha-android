@@ -1,16 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Permisos requeridos para operación en campo -->
-    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Permiso para feedback háptico -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
-
     <application
-        android:name=".AgroValleApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -18,8 +12,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AgroValleCosecha">
 
+        <!-- 1. Pantalla de Inicio de Sesión (Launcher) -->
         <activity
-            android:name=".MainActivity"
+            android:name=".view.LoginActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
@@ -29,5 +24,50 @@
             </intent-filter>
         </activity>
 
+        <!-- 2. Menú Principal -->
+        <activity
+            android:name=".view.MenuActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- 3. Registro de Asistencia QR -->
+        <activity
+            android:name=".view.AsistenciaQRActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- 4. Búsqueda por DNI -->
+        <activity
+            android:name=".view.BusquedaDNIActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 5. Contexto Agronómico del Turno -->
+        <activity
+            android:name=".view.ContextoAgronomicoActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- 6. Calibración de Tara -->
+        <activity
+            android:name=".view.CalibrarTaraActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- 7. Registro de Pesaje en Campo -->
+        <activity
+            android:name=".view.RegistrarPesajeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 8. Confirmación de Pesaje -->
+        <activity
+            android:name=".view.ConfirmacionActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
     </application>
+
 </manifest>
