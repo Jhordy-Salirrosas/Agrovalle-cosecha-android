@@ -18,6 +18,8 @@ Esta rama (`feature/ui-navegacion`) contiene la implementación exclusiva del ro
 6. **OBLIGATORIO ViewModel con SavedStateHandle**: `TurnoViewModel` retiene roles, jornadas, conteo de asistencia, tara y acumulado diario sobreviviendo a recreaciones de pantalla por rotación.
 7. **SDK Mínimo**: API 24 (Android 7.0), compilado para API 34.
 
+> ⚠️ **Estado compartido del turno (pendiente con Coder 1):** el contador de asistencia, la tara calibrada, el acumulado diario y el estado de la parihuela son locales a cada Activity por ahora. Se integrará un repositorio singleton (`TurnoRepository`) implementado por Coder 1 (Diego) para compartirlos entre pantallas; la UI ya está preparada para consumirlo.
+
 ---
 
 ## 📂 Estructura del Código Fuente
