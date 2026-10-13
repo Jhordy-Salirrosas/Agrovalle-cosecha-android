@@ -16,6 +16,11 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CUARTEL = "extra_cuartel"
         const val EXTRA_VARIEDAD = "extra_variedad"
+
+        private const val KEY_POS_CUARTEL = "key_pos_cuartel"
+        private const val KEY_POS_CLP = "key_pos_clp"
+        private const val KEY_BILOXI = "key_biloxi"
+        private const val KEY_VENTURA = "key_ventura"
     }
 
     private lateinit var binding: ActivityContextoBinding
@@ -30,7 +35,23 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
 
         configurarSpinners()
         configurarListeners()
+
+        if (savedInstanceState != null) {
+            binding.spnCuartel.setSelection(savedInstanceState.getInt(KEY_POS_CUARTEL, 0))
+            binding.spnClp.setSelection(savedInstanceState.getInt(KEY_POS_CLP, 0))
+            binding.rbBiloxi.isChecked = savedInstanceState.getBoolean(KEY_BILOXI, false)
+            binding.rbVentura.isChecked = savedInstanceState.getBoolean(KEY_VENTURA, false)
+        }
+
         observarEstado()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_POS_CUARTEL, binding.spnCuartel.selectedItemPosition)
+        outState.putInt(KEY_POS_CLP, binding.spnClp.selectedItemPosition)
+        outState.putBoolean(KEY_BILOXI, binding.rbBiloxi.isChecked)
+        outState.putBoolean(KEY_VENTURA, binding.rbVentura.isChecked)
     }
 
     private fun configurarSpinners() {
