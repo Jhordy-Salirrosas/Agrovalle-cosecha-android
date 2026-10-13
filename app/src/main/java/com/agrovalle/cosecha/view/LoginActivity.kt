@@ -20,6 +20,10 @@ class LoginActivity : AppCompatActivity() {
 
         const val ROL_CAPATAZ = "Capataz"
         const val ROL_ASISTENTE = "Asistente"
+
+        private const val KEY_POS_ROL = "key_pos_rol"
+        private const val KEY_POS_JORNADA = "key_pos_jornada"
+        private const val KEY_POS_FUNDO = "key_pos_fundo"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,7 +32,21 @@ class LoginActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         configurarSpinners()
+
+        if (savedInstanceState != null) {
+            binding.spnRol.setSelection(savedInstanceState.getInt(KEY_POS_ROL, 0))
+            binding.spnJornada.setSelection(savedInstanceState.getInt(KEY_POS_JORNADA, 0))
+            binding.spnFundo.setSelection(savedInstanceState.getInt(KEY_POS_FUNDO, 0))
+        }
+
         configurarBotonIniciar()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_POS_ROL, binding.spnRol.selectedItemPosition)
+        outState.putInt(KEY_POS_JORNADA, binding.spnJornada.selectedItemPosition)
+        outState.putInt(KEY_POS_FUNDO, binding.spnFundo.selectedItemPosition)
     }
 
     private fun configurarSpinners() {
