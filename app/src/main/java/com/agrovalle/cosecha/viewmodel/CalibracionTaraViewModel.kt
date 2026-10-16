@@ -7,6 +7,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.agrovalle.cosecha.AgroValleApp
 import com.agrovalle.cosecha.data.local.entity.CalibracionTaraEntity
+import com.agrovalle.cosecha.util.CalculadoraPesaje
 import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.FechaHoraUtil
 import com.agrovalle.cosecha.util.SesionTurno
@@ -85,11 +86,10 @@ class CalibracionTaraViewModel(app: Application) : AndroidViewModel(app) {
             _calibracionValida.value = false
             return
         }
-        val promedio = pesos.average()
-        val redondeado = redondear3(promedio)
+        val redondeado = CalculadoraPesaje.promedioMuestras(pesos)
         _taraPromedio.value = redondeado
         _calibracionValida.value = pesos.size == Constantes.MUESTRAS_CALIBRACION &&
-            redondeado in Constantes.TARA_MIN..Constantes.TARA_MAX
+            CalculadoraPesaje.taraValida(redondeado)
     }
 
     /** AGV-015: guarda la tara del turno en Room con fecha, hora y responsable. */
