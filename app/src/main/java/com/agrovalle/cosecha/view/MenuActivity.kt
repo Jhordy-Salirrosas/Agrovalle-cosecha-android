@@ -3,80 +3,64 @@ package com.agrovalle.cosecha.view
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.agrovalle.cosecha.databinding.ActivityMenuBinding
-import com.agrovalle.cosecha.viewmodel.TurnoViewModel
+import com.agrovalle.cosecha.util.SesionTurno
 
+/**
+ * Pantalla 02 - Menu principal (hub por rol).
+ * Lee el rol/jornada/fundo desde la sesion compartida, no de Intents, para que
+ * el estado del turno no se pierda al navegar entre pantallas.
+ */
 class MenuActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMenuBinding
-    private val viewModel: TurnoViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMenuBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val rol = intent.getStringExtra(LoginActivity.EXTRA_ROL) ?: LoginActivity.ROL_CAPATAZ
-        val jornada = intent.getStringExtra(LoginActivity.EXTRA_JORNADA) ?: "Jornada Mañana"
-        val fundo = intent.getStringExtra(LoginActivity.EXTRA_FUNDO) ?: "Fundo Principal Virú"
-
-        viewModel.setContextoLogin(rol, jornada, fundo)
+        val rol = SesionTurno.rol.value ?: SesionTurno.ROL_CAPATAZ
+        val jornada = SesionTurno.jornada.value ?: SesionTurno.JORNADA_MANANA_TXT
+        val fundo = SesionTurno.fundo.value ?: "Fundo Principal Virú"
 
         configurarEncabezado(rol, jornada, fundo)
         configurarVisibilidadPorRol(rol)
-        configurarNavegacion(rol)
+        configurarNavegacion()
     }
 
     private fun configurarEncabezado(rol: String, jornada: String, fundo: String) {
-        binding.tvRolActivo.text = "Operador: $rol de Cuadrilla"
+        binding.tvRolActivo.text = "Operador: $rol"
         binding.tvDetalleTurno.text = "$jornada • $fundo"
     }
 
     private fun configurarVisibilidadPorRol(rol: String) {
-        if (rol == LoginActivity.ROL_CAPATAZ) {
-            binding.layoutOpcionesCapataz.visibility = View.VISIBLE
-            binding.layoutOpcionesAsistente.visibility = View.GONE
-        } else {
-            binding.layoutOpcionesCapataz.visibility = View.GONE
-            binding.layoutOpcionesAsistente.visibility = View.VISIBLE
-        }
+        val esCapataz = rol == SesionTurno.ROL_CAPATAZ
+        binding.layoutOpcionesCapataz.visibility = if (esCapataz) View.VISIBLE else View.GONE
+        binding.layoutOpcionesAsistente.visibility = if (esCapataz) View.GONE else View.VISIBLE
     }
 
-    private fun configurarNavegacion(rol: String) {
-        // Módulo Capataz
+    private fun configurarNavegacion() {
+        // Modulo Capataz
         binding.btnRegistrarAsistencia.setOnClickListener {
-            val intent = Intent(this, AsistenciaQRActivity::class.java).apply {
-                putExtra(LoginActivity.EXTRA_ROL, rol)
-            }
-            startActivity(intent)
+            startActivity(Intent(this, AsistenciaQRActivity::class.java))
         }
-
         binding.btnBuscarDni.setOnClickListener {
-            val intent = Intent(this, BusquedaDNIActivity::class.java).apply {
-                putExtra(LoginActivity.EXTRA_ROL, rol)
-            }
-            startActivity(intent)
+            startActivity(Intent(this, BusquedaDNIActivity::class.java))
         }
 
-        // Módulo Asistente
+        // Modulo Asistente
         binding.btnContextoTurno.setOnClickListener {
-            val intent = Intent(this, ContextoAgronomicoActivity::class.java).apply {
-                putExtra(LoginActivity.EXTRA_ROL, rol)
-            }
-            startActivity(intent)
+            startActivity(Intent(this, ContextoAgronomicoActivity::class.java))
         }
-
         binding.btnRegistrarPesaje.setOnClickListener {
-            val intent = Intent(this, RegistrarPesajeActivity::class.java).apply {
-                putExtra(LoginActivity.EXTRA_ROL, rol)
-            }
-            startActivity(intent)
+            startActivity(Intent(this, RegistrarPesajeActivity::class.java))
         }
 
-        // Cerrar Turno -> vuelve a Login
+        // Cerrar turno -> vuelve a Login limpiando la pila
         binding.btnCerrarTurno.setOnClickListener {
+            SesionTurno.cerrar()
             val intent = Intent(this, LoginActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             }

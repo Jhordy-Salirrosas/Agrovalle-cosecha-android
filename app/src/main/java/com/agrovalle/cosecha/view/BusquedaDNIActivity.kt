@@ -8,20 +8,29 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.agrovalle.cosecha.databinding.ActivityBusquedaDniBinding
 import com.agrovalle.cosecha.model.Jornalero
-import com.agrovalle.cosecha.viewmodel.TurnoViewModel
+import com.agrovalle.cosecha.viewmodel.AsistenciaViewModel
 
+/**
+ * Pantalla 04 - Busqueda por DNI (AGV-016, plan B de AGV-001).
+ *
+ * El capataz ingresa los ULTIMOS 4 DIGITOS con el selector numerico y el sistema
+ * busca coincidencias en el padron local (Room). Al confirmar se devuelve el
+ * jornalero para registrar el ingreso manual en la bitacora.
+ */
 class BusquedaDNIActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityBusquedaDniBinding
-    private val viewModel: TurnoViewModel by viewModels()
+    private val viewModel: AsistenciaViewModel by viewModels()
 
     private var digitosIngresados: String = ""
     private var jornaleroEncontrado: Jornalero? = null
 
     companion object {
+        const val EXTRA_JORNALERO = "extra_jornalero"
         const val EXTRA_NOMBRE_JORNALERO = "extra_nombre_jornalero"
         const val EXTRA_DNI_JORNALERO = "extra_dni_jornalero"
 
+        private const val MAX_DIGITOS = 4
         private const val KEY_DIGITOS = "key_digitos"
         private const val KEY_JORNALERO = "key_jornalero"
     }
@@ -39,8 +48,8 @@ class BusquedaDNIActivity : AppCompatActivity() {
 
         configurarTeclado()
         configurarEventos()
+        observarCoincidencias()
         actualizarDisplay()
-
         jornaleroEncontrado?.let { mostrarResultado(it) }
     }
 
@@ -66,7 +75,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
 
         for ((boton, digito) in botonesNumericos) {
             boton.setOnClickListener {
-                if (digitosIngresados.length < 8) {
+                if (digitosIngresados.length < MAX_DIGITOS) {
                     digitosIngresados += digito
                     actualizarDisplay()
                 }
@@ -76,28 +85,40 @@ class BusquedaDNIActivity : AppCompatActivity() {
         binding.btnKeyClear.setOnClickListener {
             if (digitosIngresados.isNotEmpty()) {
                 digitosIngresados = digitosIngresados.dropLast(1)
+                if (digitosIngresados.isEmpty()) limpiarResultado()
                 actualizarDisplay()
             }
         }
 
-        binding.btnKeyBuscar.setOnClickListener {
-            ejecutarBusqueda()
-        }
+        binding.btnKeyBuscar.setOnClickListener { ejecutarBusqueda() }
     }
 
     private fun configurarEventos() {
-        binding.btnVolverDni.setOnClickListener {
-            finish()
-        }
+        binding.btnVolverDni.setOnClickListener { finish() }
 
         binding.btnConfirmarAsistencia.setOnClickListener {
-            jornaleroEncontrado?.let { j ->
-                val resultadoIntent = Intent().apply {
-                    putExtra(EXTRA_NOMBRE_JORNALERO, j.nombreCompleto)
-                    putExtra(EXTRA_DNI_JORNALERO, j.dni)
+            jornaleroEncontrado?.let { jornalero ->
+                val resultado = Intent().apply {
+                    putExtra(EXTRA_JORNALERO, jornalero)
+                    putExtra(EXTRA_NOMBRE_JORNALERO, jornalero.nombreCompleto)
+                    putExtra(EXTRA_DNI_JORNALERO, jornalero.dni)
                 }
-                setResult(Activity.RESULT_OK, resultadoIntent)
+                setResult(Activity.RESULT_OK, resultado)
                 finish()
+            }
+        }
+    }
+
+    private fun observarCoincidencias() {
+        viewModel.coincidencias.observe(this) { lista ->
+            if (digitosIngresados.isEmpty()) return@observe
+            val primero = lista.firstOrNull()
+            if (primero != null) {
+                jornaleroEncontrado = primero
+                mostrarResultado(primero)
+            } else {
+                jornaleroEncontrado = null
+                mostrarResultadoVacio()
             }
         }
     }
@@ -114,21 +135,13 @@ class BusquedaDNIActivity : AppCompatActivity() {
 
     private fun ejecutarBusqueda() {
         if (digitosIngresados.isEmpty()) return
-
-        val resultados = viewModel.buscarJornaleroPorUltimosDigitosDni(digitosIngresados)
-        if (resultados.isNotEmpty()) {
-            val primero = resultados.first()
-            jornaleroEncontrado = primero
-            mostrarResultado(primero)
-        } else {
-            jornaleroEncontrado = null
-            mostrarResultadoVacio()
-        }
+        viewModel.buscarPorUltimosDigitos(digitosIngresados)
     }
 
     private fun mostrarResultado(jornalero: Jornalero) {
         binding.tvNombreJornalero.text = jornalero.nombreCompleto
-        binding.tvDniCompleto.text = "DNI: ${jornalero.dni} • Cuadrilla ${jornalero.cuadrillaCodigo}"
+        binding.tvDniCompleto.text =
+            "DNI: ${jornalero.dni} • Cuadrilla ${jornalero.cuadrillaCodigo}"
         binding.cardResultado.visibility = View.VISIBLE
         binding.tvEstadoVacio.visibility = View.GONE
     }
@@ -136,6 +149,14 @@ class BusquedaDNIActivity : AppCompatActivity() {
     private fun mostrarResultadoVacio() {
         binding.cardResultado.visibility = View.GONE
         binding.tvEstadoVacio.visibility = View.VISIBLE
-        binding.tvEstadoVacio.text = "No se encontró ningún jornalero con DNI que coincida con '$digitosIngresados'"
+        binding.tvEstadoVacio.text =
+            "No se encontró ningún jornalero con DNI que termine en '$digitosIngresados'"
+    }
+
+    private fun limpiarResultado() {
+        jornaleroEncontrado = null
+        binding.cardResultado.visibility = View.GONE
+        binding.tvEstadoVacio.visibility = View.VISIBLE
+        binding.tvEstadoVacio.text = "Ingrese dígitos y presione Buscar"
     }
 }

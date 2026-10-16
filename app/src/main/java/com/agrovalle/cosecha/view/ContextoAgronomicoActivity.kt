@@ -5,17 +5,28 @@ import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.agrovalle.cosecha.R
 import com.agrovalle.cosecha.databinding.ActivityContextoBinding
-import com.agrovalle.cosecha.viewmodel.TurnoViewModel
+import com.agrovalle.cosecha.model.Parihuela
+import com.agrovalle.cosecha.viewmodel.ContextoViewModel
 
+/**
+ * Pantalla 05 - Contexto agronomico del turno (AGV-002).
+ *
+ * Cuartel, CLP y variedad se guardan en la parihuela digital (Room). Mientras
+ * la parihuela este ABIERTA el contexto queda bloqueado: para cambiar de cuartel
+ * o variedad hay que sellarla primero.
+ */
 class ContextoAgronomicoActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CUARTEL = "extra_cuartel"
         const val EXTRA_VARIEDAD = "extra_variedad"
+        const val EXTRA_PARIHUELA_ID = "extra_parihuela_id"
+        const val EXTRA_MARBETE = "extra_marbete"
 
         private const val KEY_POS_CUARTEL = "key_pos_cuartel"
         private const val KEY_POS_CLP = "key_pos_clp"
@@ -24,7 +35,7 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityContextoBinding
-    private val viewModel: TurnoViewModel by viewModels()
+    private val viewModel: ContextoViewModel by viewModels()
 
     private var estaParihuelaAbierta = false
 
@@ -44,6 +55,7 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
         }
 
         observarEstado()
+        viewModel.cargarEstado()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -55,24 +67,32 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
     }
 
     private fun configurarSpinners() {
-        val cuarteles = listOf("Seleccione Cuartel...", "Cuartel 01", "Cuartel 05", "Cuartel 12", "Cuartel 18")
-        val adapterCuartel = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, cuarteles)
-        binding.spnCuartel.adapter = adapterCuartel
+        val cuarteles = listOf(
+            "Seleccione Cuartel...", "Cuartel 01", "Cuartel 05", "Cuartel 12", "Cuartel 18"
+        )
+        binding.spnCuartel.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, cuarteles)
 
-        val clps = listOf("Seleccione CLP...", "CLP-01 (Virú Central)", "CLP-02 (Virú Sur)", "CLP-03 (Chao Norte)")
-        val adapterClp = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, clps)
-        binding.spnClp.adapter = adapterClp
+        val clps = listOf(
+            "Seleccione CLP...", "CLP-01 (Virú Central)", "CLP-02 (Virú Sur)", "CLP-03 (Chao Norte)"
+        )
+        binding.spnClp.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, clps)
     }
 
     private fun configurarListeners() {
-        binding.btnVolverContexto.setOnClickListener {
-            finish()
-        }
+        binding.btnVolverContexto.setOnClickListener { finish() }
 
         val itemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
                 validarFormulario()
             }
+
             override fun onNothingSelected(parent: AdapterView<*>?) {
                 validarFormulario()
             }
@@ -80,23 +100,23 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
 
         binding.spnCuartel.onItemSelectedListener = itemSelectedListener
         binding.spnClp.onItemSelectedListener = itemSelectedListener
-        binding.rgVariedad.setOnCheckedChangeListener { _, _ ->
-            validarFormulario()
-        }
+        binding.rgVariedad.setOnCheckedChangeListener { _, _ -> validarFormulario() }
 
         binding.btnAccionParihuela.setOnClickListener {
-            if (!estaParihuelaAbierta) {
-                abrirParihuela()
-            } else {
-                cerrarParihuela()
-            }
+            if (estaParihuelaAbierta) cerrarParihuela() else abrirParihuela()
         }
     }
 
     private fun observarEstado() {
-        viewModel.parihuelaAbierta.observe(this) { abierta ->
-            estaParihuelaAbierta = abierta
-            actualizarUiEstadoParihuela(abierta)
+        viewModel.parihuelaAbierta.observe(this) { parihuela ->
+            estaParihuelaAbierta = parihuela != null
+            actualizarUiEstadoParihuela(parihuela)
+        }
+        viewModel.mensaje.observe(this) { mensaje ->
+            if (!mensaje.isNullOrBlank()) {
+                Toast.makeText(this, mensaje, Toast.LENGTH_LONG).show()
+                viewModel.consumirMensaje()
+            }
         }
     }
 
@@ -105,11 +125,9 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
             binding.btnAccionParihuela.isEnabled = true
             return
         }
-
         val cuartelValido = binding.spnCuartel.selectedItemPosition > 0
         val clpValido = binding.spnClp.selectedItemPosition > 0
         val variedadValida = binding.rbBiloxi.isChecked || binding.rbVentura.isChecked
-
         binding.btnAccionParihuela.isEnabled = cuartelValido && clpValido && variedadValida
     }
 
@@ -118,41 +136,43 @@ class ContextoAgronomicoActivity : AppCompatActivity() {
         val clp = binding.spnClp.selectedItem.toString()
         val variedad = if (binding.rbBiloxi.isChecked) "Biloxi" else "Ventura"
 
-        viewModel.setParihuelaContexto(cuartel, clp, variedad, abierta = true)
-
-        // Navegar a CalibrarTaraActivity
-        val intent = Intent(this, CalibrarTaraActivity::class.java).apply {
-            putExtra(EXTRA_CUARTEL, cuartel)
-            putExtra(EXTRA_VARIEDAD, variedad)
+        viewModel.abrirParihuela(cuartel, clp, variedad) { parihuela ->
+            val intent = Intent(this, CalibrarTaraActivity::class.java).apply {
+                putExtra(EXTRA_CUARTEL, parihuela.cuartel)
+                putExtra(EXTRA_VARIEDAD, parihuela.variedad)
+                putExtra(EXTRA_PARIHUELA_ID, parihuela.id)
+                putExtra(EXTRA_MARBETE, parihuela.codigoMarbete)
+            }
+            startActivity(intent)
         }
-        startActivity(intent)
     }
 
     private fun cerrarParihuela() {
-        viewModel.setParihuelaContexto("", "", "", abierta = false)
+        viewModel.cerrarParihuela()
         binding.spnCuartel.setSelection(0)
         binding.spnClp.setSelection(0)
         binding.rgVariedad.clearCheck()
         validarFormulario()
     }
 
-    private fun actualizarUiEstadoParihuela(abierta: Boolean) {
-        if (abierta) {
-            binding.tvEstadoParihuela.text = "Estado: PARIHUELA ABIERTA (MARB-2024-001)"
-            binding.tvMarbeteInfo.text = "Contexto bloqueado. Parihuela activa lista para recepción de jabas."
+    private fun actualizarUiEstadoParihuela(parihuela: Parihuela?) {
+        if (parihuela != null) {
+            binding.tvEstadoParihuela.text =
+                "Estado: PARIHUELA ABIERTA (${parihuela.codigoMarbete})"
+            binding.tvMarbeteInfo.text =
+                "Contexto bloqueado: ${parihuela.cuartel} • ${parihuela.variedad} • ${parihuela.totalJabas} jabas"
             binding.btnAccionParihuela.text = getString(R.string.cerrar_parihuela)
 
-            // Bloquear selectores
             binding.spnCuartel.isEnabled = false
             binding.spnClp.isEnabled = false
             binding.rbBiloxi.isEnabled = false
             binding.rbVentura.isEnabled = false
         } else {
             binding.tvEstadoParihuela.text = "Estado: PARIHUELA NO INICIADA"
-            binding.tvMarbeteInfo.text = "Seleccione los parámetros agronómicos para habilitar el pesaje."
+            binding.tvMarbeteInfo.text =
+                "Seleccione los parámetros agronómicos para habilitar el pesaje."
             binding.btnAccionParihuela.text = getString(R.string.abrir_parihuela)
 
-            // Habilitar selectores
             binding.spnCuartel.isEnabled = true
             binding.spnClp.isEnabled = true
             binding.rbBiloxi.isEnabled = true

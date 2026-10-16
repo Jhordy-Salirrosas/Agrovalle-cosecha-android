@@ -7,6 +7,6 @@ data class Asistencia(
     val jornaleroId: Long,
     val fecha: String,
     val horaIngreso: String,
-    val estado: String = "PRESENTE",
-    val metodo: String = "QR" // "QR" o "DNI"
+    val estado: String = "PUNTUAL", // "PUNTUAL" o "TARDANZA"
+    val metodo: String = "QR_SCAN"  // "QR_SCAN" o "DNI_MANUAL"
 ) : Serializable

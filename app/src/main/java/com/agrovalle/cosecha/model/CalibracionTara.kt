@@ -4,8 +4,9 @@ import java.io.Serializable
 
 data class CalibracionTara(
     val id: Long = 0L,
-    val taraPromedio: Double,
-    val pesoMuestra: Double,
-    val fecha: String,
+    val taraPromedioCalculada: Double,
+    val pesoMuestra5Jabas: Double,
+    val asistenteNombre: String,
+    val timestamp: Long = System.currentTimeMillis(),
     val aprobado: Boolean
 ) : Serializable

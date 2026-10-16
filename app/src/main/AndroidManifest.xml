@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Permiso para feedback háptico -->
+    <!-- Permiso para feedback háptico (AGV-004) -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Permiso para el lector real de QR / Code 128 (ZXing) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
+        android:name=".AgroValleApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -28,34 +34,34 @@
             android:name=".view.MenuActivity"
             android:exported="false" />
 
-        <!-- 3. Registro de Asistencia QR -->
+        <!-- 3. Registro de Asistencia QR (AGV-001) -->
         <activity
             android:name=".view.AsistenciaQRActivity"
             android:exported="false" />
 
-        <!-- 4. Búsqueda por DNI -->
+        <!-- 4. Búsqueda por DNI (AGV-016) -->
         <activity
             android:name=".view.BusquedaDNIActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- 5. Contexto Agronómico del Turno -->
+        <!-- 5. Contexto Agronómico del Turno (AGV-002) -->
         <activity
             android:name=".view.ContextoAgronomicoActivity"
             android:exported="false" />
 
-        <!-- 6. Calibración de Tara -->
+        <!-- 6. Calibración de Tara (AGV-015) -->
         <activity
             android:name=".view.CalibrarTaraActivity"
             android:exported="false" />
 
-        <!-- 7. Registro de Pesaje en Campo -->
+        <!-- 7. Registro de Pesaje en Campo (AGV-003) -->
         <activity
             android:name=".view.RegistrarPesajeActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- 8. Confirmación de Pesaje -->
+        <!-- 8. Confirmación de Pesaje (AGV-004) -->
         <activity
             android:name=".view.ConfirmacionActivity"
             android:exported="false" />

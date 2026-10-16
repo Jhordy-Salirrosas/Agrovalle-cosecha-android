@@ -8,5 +8,6 @@ data class Parihuela(
     val cuartel: String,
     val variedad: String,
     val clp: String,
-    val estado: String = "ABIERTA" // "ABIERTA", "CERRADA"
+    val totalJabas: Int = 0,
+    val estado: String = "ABIERTA" // "ABIERTA", "SELLADA"
 ) : Serializable

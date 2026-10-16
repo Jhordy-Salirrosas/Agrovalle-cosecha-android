@@ -3,30 +3,32 @@ package com.agrovalle.cosecha.view
 import android.content.Intent
 import android.os.Bundle
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.agrovalle.cosecha.R
 import com.agrovalle.cosecha.databinding.ActivityCalibrarTaraBinding
+import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.FeedbackUtil
-import com.agrovalle.cosecha.viewmodel.TurnoViewModel
+import com.agrovalle.cosecha.viewmodel.CalibracionTaraViewModel
 import java.util.Locale
 
+/**
+ * Pantalla 06 - Calibracion de tara (AGV-015).
+ *
+ * Se pesan 5 jabas vacias; la tara promedio por jaba se guarda en Room como
+ * tara del turno (con fecha, hora y responsable) y se aplica a todos los pesajes.
+ */
 class CalibrarTaraActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityCalibrarTaraBinding
-    private val viewModel: TurnoViewModel by viewModels()
+    private val viewModel: CalibracionTaraViewModel by viewModels()
 
-    private val listaMuestras = mutableListOf<Double>()
-    private var pesoActualMuestra: Double = 0.375
-
+    private var pesoActualMuestra: Double = Constantes.TARA_POR_DEFECTO
     private lateinit var vistasPasos: List<TextView>
 
     companion object {
-        const val EXTRA_TARA = "extra_tara"
-        const val EXTRA_ES_CALIBRADA = "extra_es_calibrada"
-
-        private const val KEY_MUESTRAS = "key_muestras_tara"
         private const val KEY_PESO_MUESTRA = "key_peso_muestra"
     }
 
@@ -36,11 +38,8 @@ class CalibrarTaraActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         if (savedInstanceState != null) {
-            savedInstanceState.getDoubleArray(KEY_MUESTRAS)?.let { muestras ->
-                listaMuestras.clear()
-                listaMuestras.addAll(muestras.toList())
-            }
-            pesoActualMuestra = savedInstanceState.getDouble(KEY_PESO_MUESTRA, 0.375)
+            pesoActualMuestra =
+                savedInstanceState.getDouble(KEY_PESO_MUESTRA, Constantes.TARA_POR_DEFECTO)
         }
 
         vistasPasos = listOf(
@@ -52,128 +51,119 @@ class CalibrarTaraActivity : AppCompatActivity() {
         )
 
         configurarEventos()
+        observarEstado()
         actualizarDisplayPesoMuestra()
-        actualizarUiPasoActual()
+        actualizarUiPasoActual(viewModel.pesosMuestra.value?.size ?: 0)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putDoubleArray(KEY_MUESTRAS, listaMuestras.toDoubleArray())
         outState.putDouble(KEY_PESO_MUESTRA, pesoActualMuestra)
     }
 
-    private fun configurarEventos() {
-        binding.btnVolverTara.setOnClickListener {
-            finish()
+    private fun observarEstado() {
+        viewModel.pesosMuestra.observe(this) { muestras ->
+            actualizarUiPasoActual(muestras.size)
         }
+        viewModel.mensaje.observe(this) { mensaje ->
+            if (!mensaje.isNullOrBlank()) {
+                Toast.makeText(this, mensaje, Toast.LENGTH_LONG).show()
+                viewModel.consumirMensaje()
+            }
+        }
+    }
+
+    private fun configurarEventos() {
+        binding.btnVolverTara.setOnClickListener { finish() }
 
         binding.btnMasPeso.setOnClickListener {
-            pesoActualMuestra = Math.round((pesoActualMuestra + 0.005) * 1000.0) / 1000.0
+            pesoActualMuestra = redondear3(pesoActualMuestra + 0.005)
             actualizarDisplayPesoMuestra()
         }
 
         binding.btnMenosPeso.setOnClickListener {
             if (pesoActualMuestra > 0.100) {
-                pesoActualMuestra = Math.round((pesoActualMuestra - 0.005) * 1000.0) / 1000.0
+                pesoActualMuestra = redondear3(pesoActualMuestra - 0.005)
                 actualizarDisplayPesoMuestra()
             }
         }
 
         binding.btnRegistrarPesoJaba.setOnClickListener {
-            registrarMuestraActual()
+            FeedbackUtil.vibrarExito(this)
+            viewModel.registrarPesoMuestra(pesoActualMuestra)
         }
 
+        // AGV-015: guarda la tara del turno en Room
         binding.btnConfirmarCalibracion.setOnClickListener {
-            val promedio = if (listaMuestras.isNotEmpty()) listaMuestras.average() else TurnoViewModel.TARA_POR_DEFECTO
-            val promedioRedondeado = Math.round(promedio * 1000.0) / 1000.0
-            viewModel.setTaraCalibrada(promedioRedondeado, calibrada = true)
-
             FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = false)
-
-            val intent = Intent(this, RegistrarPesajeActivity::class.java).apply {
-                putExtra(EXTRA_TARA, promedioRedondeado)
-                putExtra(EXTRA_ES_CALIBRADA, true)
-            }
-            startActivity(intent)
-            finish()
+            viewModel.confirmarYGuardarTara { irARegistrarPesaje() }
         }
 
+        // AGV-003 escenario 2: se omite la calibracion y se usa la tara por defecto
         binding.btnOmitirCalibracion.setOnClickListener {
-            viewModel.setTaraCalibrada(TurnoViewModel.TARA_POR_DEFECTO, calibrada = false)
-
             FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
-
-            val intent = Intent(this, RegistrarPesajeActivity::class.java).apply {
-                putExtra(EXTRA_TARA, TurnoViewModel.TARA_POR_DEFECTO)
-                putExtra(EXTRA_ES_CALIBRADA, false)
-            }
-            startActivity(intent)
-            finish()
+            viewModel.usarTaraPorDefecto { irARegistrarPesaje() }
         }
+    }
+
+    private fun irARegistrarPesaje() {
+        startActivity(Intent(this, RegistrarPesajeActivity::class.java))
+        finish()
     }
 
     private fun actualizarDisplayPesoMuestra() {
         binding.tvPesoMuestra.text = String.format(Locale.US, "%.3f kg", pesoActualMuestra)
     }
 
-    private fun registrarMuestraActual() {
-        if (listaMuestras.size < 5) {
-            listaMuestras.add(pesoActualMuestra)
-            FeedbackUtil.vibrarExito(this)
-
-            // Simular variación realista para la siguiente muestra
-            val variaciones = listOf(0.370, 0.380, 0.375, 0.378, 0.372)
-            pesoActualMuestra = variaciones[listaMuestras.size % variaciones.size]
-            actualizarDisplayPesoMuestra()
-
-            actualizarUiPasoActual()
-        }
-    }
-
-    private fun actualizarUiPasoActual() {
-        val totalRegistradas = listaMuestras.size
-
+    private fun actualizarUiPasoActual(totalRegistradas: Int) {
         for (i in vistasPasos.indices) {
             val tvPaso = vistasPasos[i]
             when {
                 i < totalRegistradas -> {
-                    // Completado
                     tvPaso.text = "✓"
-                    tvPaso.backgroundTintList = ContextCompat.getColorStateList(this, R.color.verde_agricola)
+                    tvPaso.backgroundTintList =
+                        ContextCompat.getColorStateList(this, R.color.verde_agricola)
                     tvPaso.setTextColor(ContextCompat.getColor(this, R.color.white))
                 }
                 i == totalRegistradas -> {
-                    // Paso activo actual
                     tvPaso.text = "${i + 1}"
-                    tvPaso.backgroundTintList = ContextCompat.getColorStateList(this, R.color.verde_claro)
+                    tvPaso.backgroundTintList =
+                        ContextCompat.getColorStateList(this, R.color.verde_claro)
                     tvPaso.setTextColor(ContextCompat.getColor(this, R.color.verde_oscuro))
                 }
                 else -> {
-                    // Pendiente
                     tvPaso.text = "${i + 1}"
-                    tvPaso.backgroundTintList = ContextCompat.getColorStateList(this, R.color.card_border)
+                    tvPaso.backgroundTintList =
+                        ContextCompat.getColorStateList(this, R.color.card_border)
                     tvPaso.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
                 }
             }
         }
 
-        if (totalRegistradas < 5) {
-            binding.tvInstruccionJaba.text = "Coloque la Jaba ${totalRegistradas + 1} vacía en la balanza"
+        val total = Constantes.MUESTRAS_CALIBRACION
+        if (totalRegistradas < total) {
+            binding.tvInstruccionJaba.text =
+                "Coloque la Jaba ${totalRegistradas + 1} vacía en la balanza"
             binding.btnRegistrarPesoJaba.isEnabled = true
             binding.btnConfirmarCalibracion.isEnabled = false
         } else {
-            binding.tvInstruccionJaba.text = "¡Muestreo completo! 5 jabas registradas"
+            binding.tvInstruccionJaba.text = "¡Muestreo completo! $total jabas registradas"
             binding.btnRegistrarPesoJaba.isEnabled = false
             binding.btnConfirmarCalibracion.isEnabled = true
         }
 
-        if (listaMuestras.isNotEmpty()) {
-            val promedio = listaMuestras.average()
-            binding.tvPromedioCalculado.text = String.format(Locale.US, "%.3f kg", promedio)
-            binding.tvDetalleMuestras.text = "Muestras registradas: $totalRegistradas de 5 [${listaMuestras.joinToString { String.format(Locale.US, "%.3f", it) }}]"
+        val muestras = viewModel.pesosMuestra.value ?: emptyList()
+        if (muestras.isNotEmpty()) {
+            binding.tvPromedioCalculado.text =
+                String.format(Locale.US, "%.3f kg", muestras.average())
+            binding.tvDetalleMuestras.text =
+                "Muestras registradas: $totalRegistradas de $total " +
+                    "[${muestras.joinToString { String.format(Locale.US, "%.3f", it) }}]"
         } else {
             binding.tvPromedioCalculado.text = "-- kg"
-            binding.tvDetalleMuestras.text = "Muestras registradas: 0 de 5"
+            binding.tvDetalleMuestras.text = "Muestras registradas: 0 de $total"
         }
     }
+
+    private fun redondear3(valor: Double): Double = Math.round(valor * 1000.0) / 1000.0
 }

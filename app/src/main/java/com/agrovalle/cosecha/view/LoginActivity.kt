@@ -3,23 +3,22 @@ package com.agrovalle.cosecha.view
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ArrayAdapter
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.agrovalle.cosecha.databinding.ActivityLoginBinding
-import com.agrovalle.cosecha.viewmodel.TurnoViewModel
+import com.agrovalle.cosecha.util.SesionTurno
 
+/**
+ * Pantalla 01 - Login / Seleccion de Rol (NavGraph Sprint 1).
+ * Configura el turno (rol, jornada y fundo) y lo guarda en la sesion compartida
+ * [SesionTurno], de modo que todas las pantallas lo conserven.
+ */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
-    private val viewModel: TurnoViewModel by viewModels()
 
     companion object {
-        const val EXTRA_ROL = "extra_rol"
-        const val EXTRA_JORNADA = "extra_jornada"
-        const val EXTRA_FUNDO = "extra_fundo"
-
-        const val ROL_CAPATAZ = "Capataz"
-        const val ROL_ASISTENTE = "Asistente"
+        const val ROL_CAPATAZ = SesionTurno.ROL_CAPATAZ
+        const val ROL_ASISTENTE = SesionTurno.ROL_ASISTENTE
 
         private const val KEY_POS_ROL = "key_pos_rol"
         private const val KEY_POS_JORNADA = "key_pos_jornada"
@@ -51,33 +50,38 @@ class LoginActivity : AppCompatActivity() {
 
     private fun configurarSpinners() {
         val roles = listOf("Capataz de Cuadrilla", "Asistente de Pesaje")
-        val adapterRol = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, roles)
-        binding.spnRol.adapter = adapterRol
+        binding.spnRol.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, roles)
 
-        val jornadas = listOf("Jornada Mañana (06:00 - 14:00)", "Jornada Tarde (14:00 - 22:00)")
-        val adapterJornada = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, jornadas)
-        binding.spnJornada.adapter = adapterJornada
+        val jornadas = listOf(SesionTurno.JORNADA_MANANA_TXT, SesionTurno.JORNADA_TARDE_TXT)
+        binding.spnJornada.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, jornadas)
 
         val fundos = listOf("Fundo Principal Virú", "Fundo Chao Norte")
-        val adapterFundo = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, fundos)
-        binding.spnFundo.adapter = adapterFundo
+        binding.spnFundo.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, fundos)
     }
 
     private fun configurarBotonIniciar() {
         binding.btnIniciarTurno.setOnClickListener {
-            val posicionRol = binding.spnRol.selectedItemPosition
-            val rolNormalizado = if (posicionRol == 0) ROL_CAPATAZ else ROL_ASISTENTE
+            val rolNormalizado =
+                if (binding.spnRol.selectedItemPosition == 0) ROL_CAPATAZ else ROL_ASISTENTE
             val jornadaSeleccionada = binding.spnJornada.selectedItem.toString()
             val fundoSeleccionado = binding.spnFundo.selectedItem.toString()
 
-            viewModel.setContextoLogin(rolNormalizado, jornadaSeleccionada, fundoSeleccionado)
+            // Estado de turno COMPARTIDO para toda la aplicacion.
+            SesionTurno.iniciar(
+                rol = rolNormalizado,
+                jornada = jornadaSeleccionada,
+                fundo = fundoSeleccionado,
+                operador = if (rolNormalizado == ROL_CAPATAZ) {
+                    "Capataz de cuadrilla"
+                } else {
+                    "Asistente de pesaje"
+                }
+            )
 
-            val intent = Intent(this, MenuActivity::class.java).apply {
-                putExtra(EXTRA_ROL, rolNormalizado)
-                putExtra(EXTRA_JORNADA, jornadaSeleccionada)
-                putExtra(EXTRA_FUNDO, fundoSeleccionado)
-            }
-            startActivity(intent)
+            startActivity(Intent(this, MenuActivity::class.java))
         }
     }
 }
