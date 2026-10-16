@@ -43,8 +43,7 @@ class AsistenciaQRActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val jornalero = result.data
-                ?.getSerializableExtra(BusquedaDNIActivity.EXTRA_JORNALERO) as? Jornalero
+            val jornalero = result.data?.getSerializableExtra(BusquedaDNIActivity.EXTRA_JORNALERO) as? Jornalero
             if (jornalero != null) viewModel.registrarManual(jornalero)
         }
     }
