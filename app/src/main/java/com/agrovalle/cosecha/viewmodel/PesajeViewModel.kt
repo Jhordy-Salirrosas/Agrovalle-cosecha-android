@@ -9,6 +9,7 @@ import com.agrovalle.cosecha.AgroValleApp
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import com.agrovalle.cosecha.data.mapper.aDominio
 import com.agrovalle.cosecha.model.Jornalero
+import com.agrovalle.cosecha.util.CalculadoraPesaje
 import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.FechaHoraUtil
 import kotlinx.coroutines.launch
@@ -50,18 +51,17 @@ class PesajeViewModel(app: Application) : AndroidViewModel(app) {
     /** AGV-003: Peso Neto = Bruto - (Tara * Jabas), nunca negativo. */
     fun calcularPesoNeto(pesoBruto: Double, cantidadJabas: Int): Double {
         val tara = _taraAplicada.value ?: Constantes.TARA_POR_DEFECTO
-        val neto = pesoBruto - (tara * cantidadJabas)
-        return redondear2(neto.coerceAtLeast(0.0))
+        return CalculadoraPesaje.calcularPesoNeto(pesoBruto, cantidadJabas, tara)
     }
 
     fun calcularTaraTotal(cantidadJabas: Int): Double {
         val tara = _taraAplicada.value ?: Constantes.TARA_POR_DEFECTO
-        return redondear2(tara * cantidadJabas)
+        return CalculadoraPesaje.calcularTaraTotal(cantidadJabas, tara)
     }
 
     /** Validacion de rangos para evitar errores de tipeo (AGV-003). */
     fun validarRango(pesoBruto: Double, cantidadJabas: Int): Boolean =
-        pesoBruto in Constantes.PESO_BRUTO_MIN..Constantes.PESO_BRUTO_MAX && cantidadJabas > 0
+        CalculadoraPesaje.rangoValido(pesoBruto, cantidadJabas)
 
     /**
      * Persiste el pesaje de forma atomica y devuelve el peso neto guardado.
@@ -80,8 +80,8 @@ class PesajeViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             val tara = _taraAplicada.value ?: Constantes.TARA_POR_DEFECTO
-            val taraTotal = redondear2(tara * cantidadJabas)
-            val neto = redondear2((pesoBruto - taraTotal).coerceAtLeast(0.0))
+            val taraTotal = CalculadoraPesaje.calcularTaraTotal(cantidadJabas, tara)
+            val neto = CalculadoraPesaje.calcularPesoNeto(pesoBruto, cantidadJabas, tara)
             val porDefecto = _esTaraPorDefecto.value == true
             val parihuela = repo.getParihuelaAbierta()
 
