@@ -8,8 +8,14 @@ object Constantes {
     /** Tara por defecto por jaba cuando el turno no fue calibrado (AGV-003). */
     const val TARA_POR_DEFECTO = 0.375
 
-    /** Tamano de la cuadrilla mostrado en el contador de asistencia. */
-    const val TOTAL_CUADRILLA = 35
+    /**
+     * Tamano REAL del padron precargado en memoria (AGV-001).
+     *
+     * Debe coincidir con DatosMemoria.TOTAL_PADRON, porque el contador de la
+     * pantalla de asistencia se muestra como "asistentes / TOTAL_CUADRILLA".
+     * Si ambos valores se desincronizan el contador nunca llega al 100%.
+     */
+    const val TOTAL_CUADRILLA = 30
 
     /** Estandar de estiba de una parihuela (AGV-006, Sprint 2). */
     const val JABAS_ESTANDAR_MIN = 100

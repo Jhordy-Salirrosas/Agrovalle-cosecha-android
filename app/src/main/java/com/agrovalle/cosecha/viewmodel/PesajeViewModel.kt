@@ -116,7 +116,6 @@ class PesajeViewModel(
         DatosMemoria.registrarPesaje(
             Pesaje(
                 jornaleroId = jornalero.id,
-                parihuelaId = null,
                 cantidadJabas = cantidadJabas,
                 pesoBruto = redondear2(pesoBruto),
                 taraTotal = taraTotal,

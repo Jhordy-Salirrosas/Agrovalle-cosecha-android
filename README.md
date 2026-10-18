@@ -190,7 +190,8 @@ git checkout feature/sprint-1-sin-room
    - *Sin fotocheck físico*: genera un QR con el texto `QR_AGV_001` en cualquier generador web.
 3. **Contexto (AGV-002)**: elige un cuartel (p. ej. **Cuartel 05**) y verás que la variedad se
    completa sola con **Ventura**. Pulsa **ASIGNAR Y FINALIZAR**: vuelve al escaneo para el siguiente.
-   - Verifica el contador: sube a `1 / 35` y el jornalero queda asignado en `DatosMemoria.asignaciones`.
+   - Verifica el contador: sube a `1 / 30` (el padrón en memoria tiene 30 jornaleros) y el jornalero
+     queda asignado en `DatosMemoria.asignaciones`.
 4. **Plan B (AGV-016)**: pulsar **Buscar por DNI**, ingresar los últimos 4 dígitos de un jornalero
    del padrón (p. ej. `1234`) y **Confirmar Asistencia** → queda como ingreso manual y navega igual
    al Contexto Agronómico.
@@ -200,6 +201,14 @@ git checkout feature/sprint-1-sin-room
    (p. ej. **4 jabas** y **9.50 kg** → peso neto **8.00 kg**). Pulsar **Guardar Pesaje**.
 7. **Confirmación (AGV-004)**: verifica el tono + vibración, el peso neto y el **acumulado diario**.
    Pulsar **Siguiente Jornalero** para el ciclo continuo.
+
+**Permiso de cámara:** al pulsar **Escanear QR** (o **Escanear Fotocheck** en el Pesaje), la app
+verifica el permiso `CAMERA` y lo solicita con `ActivityResultContracts.RequestPermission()`. Si se
+**deniega**, muestra un Toast explicativo y **no se cierra**; en la pantalla de asistencia el plan B
+por DNI sigue disponible.
+
+**Checklist de pruebas:** el plan de pruebas de funcionamiento del Sprint 1 (60 casos) está en
+[`AgroValle-Cosecha-Checklist-Pruebas-Sprint1.md`](../AgroValle-Cosecha-Checklist-Pruebas-Sprint1.md).
 
 **Prueba del ciclo de vida:** en el Pesaje, escribe el peso y las jabas y **gira el teléfono**;
 los valores deben conservarse (los guarda `SavedStateHandle`, no la Activity).

@@ -1,12 +1,15 @@
 package com.agrovalle.cosecha.view
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.agrovalle.cosecha.databinding.ActivityAsistenciaQrBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.util.Constantes
@@ -26,11 +29,36 @@ import com.journeyapps.barcodescanner.ScanOptions
  * Al registrar una asistencia exitosa se muestra el Toast "Asistencia
  * registrada" y se navega a [ContextoAgronomicoActivity] enviando el ID del
  * jornalero en el extra `EXTRA_JORNALERO_ID`.
+ *
+ * PERMISO DE CAMARA: aunque ZXing ya solicita el permiso por su cuenta, aqui se
+ * valida y se solicita EXPLICITAMENTE antes de abrir el escaner, de modo que si
+ * el usuario deniega el permiso la app no crashea y se informa con un Toast.
  */
 class AsistenciaQRActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAsistenciaQrBinding
     private val viewModel: AsistenciaViewModel by viewModels()
+
+    /**
+     * Fix 2: se pide el permiso de CAMARA en tiempo de ejecucion.
+     * Si se concede se abre el escaner; si se deniega se avisa con un Toast y la
+     * pantalla sigue funcionando (el plan B por DNI no necesita camara).
+     */
+    private val permisoCamaraLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { concedido ->
+        if (concedido) {
+            abrirEscaner()
+        } else {
+            FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
+            Toast.makeText(
+                this,
+                "Permiso de cámara denegado. Use \"Buscar por DNI\" para registrar la asistencia.",
+                Toast.LENGTH_LONG
+            ).show()
+            binding.tvEstadoEscaneo.text = "Sin permiso de cámara"
+        }
+    }
 
     /** AGV-001: lector real de QR / Code 128 con la camara del terminal. */
     private val escanerQrLauncher = registerForActivityResult(ScanContract()) { result ->
@@ -82,14 +110,28 @@ class AsistenciaQRActivity : AppCompatActivity() {
     private fun configurarEventos() {
         binding.btnVolver.setOnClickListener { finish() }
 
-        binding.btnEscanearQr.setOnClickListener { lanzarEscaner() }
+        binding.btnEscanearQr.setOnClickListener { solicitarCamaraYAbrirEscaner() }
 
         binding.btnBuscarPorDni.setOnClickListener {
             busquedaDniLauncher.launch(Intent(this, BusquedaDNIActivity::class.java))
         }
     }
 
-    private fun lanzarEscaner() {
+    /** Fix 2: verifica el permiso y, si falta, lo solicita; luego abre el escaner. */
+    private fun solicitarCamaraYAbrirEscaner() {
+        val concedido = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (concedido) {
+            abrirEscaner()
+        } else {
+            permisoCamaraLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun abrirEscaner() {
         val opciones = ScanOptions().apply {
             setPrompt("Apunte la cámara al fotocheck del jornalero")
             setBeepEnabled(false) // el feedback sensorial lo da FeedbackUtil

@@ -1,10 +1,14 @@
 package com.agrovalle.cosecha.view
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.agrovalle.cosecha.databinding.ActivityRegistrarPesajeBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.util.Constantes
@@ -23,6 +27,10 @@ import java.util.Locale
  *
  * El peso en curso y la cantidad de jabas viven en el SavedStateHandle del
  * ViewModel (AGV-003 + ciclo de vida).
+ *
+ * PERMISO DE CAMARA: se valida y solicita explicitamente antes de leer el
+ * fotocheck; si se deniega no hay crash, solo un Toast (el teclado manual sigue
+ * operativo).
  */
 class RegistrarPesajeActivity : AppCompatActivity() {
 
@@ -36,6 +44,25 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         const val EXTRA_PESO_NETO = "extra_peso_neto"
         const val EXTRA_ACUMULADO_DIARIO = "extra_acumulado_diario"
         const val EXTRA_ES_TARA_CALIBRADA = "extra_es_tara_calibrada"
+    }
+
+    /**
+     * Fix 2: permiso de CAMARA en tiempo de ejecucion. Concedido -> se abre el
+     * escaner; denegado -> Toast informativo y la pantalla no se rompe.
+     */
+    private val permisoCamaraLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { concedido ->
+        if (concedido) {
+            abrirEscaner()
+        } else {
+            FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
+            Toast.makeText(
+                this,
+                "Permiso de cámara denegado: no se puede leer el fotocheck.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     /** Escaneo REAL del fotocheck del jornalero (ZXing). */
@@ -110,11 +137,25 @@ class RegistrarPesajeActivity : AppCompatActivity() {
     }
 
     private fun configurarEscanerFotocheck() {
-        binding.btnEscanearFotocheck.setOnClickListener { lanzarEscaner() }
-        binding.cardJornaleroPesaje.setOnClickListener { lanzarEscaner() }
+        binding.btnEscanearFotocheck.setOnClickListener { solicitarCamaraYAbrirEscaner() }
+        binding.cardJornaleroPesaje.setOnClickListener { solicitarCamaraYAbrirEscaner() }
     }
 
-    private fun lanzarEscaner() {
+    /** Fix 2: verifica el permiso y, si falta, lo solicita; luego abre el escaner. */
+    private fun solicitarCamaraYAbrirEscaner() {
+        val concedido = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (concedido) {
+            abrirEscaner()
+        } else {
+            permisoCamaraLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun abrirEscaner() {
         val opciones = ScanOptions().apply {
             setPrompt("Apunte la cámara al fotocheck del jornalero")
             setBeepEnabled(false)
