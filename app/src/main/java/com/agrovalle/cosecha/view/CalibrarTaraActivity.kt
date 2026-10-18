@@ -15,10 +15,14 @@ import com.agrovalle.cosecha.viewmodel.CalibracionTaraViewModel
 import java.util.Locale
 
 /**
- * Pantalla 06 - Calibracion de tara (AGV-015).
+ * Pantalla 06 - Calibracion de tara (AGV-015) - SIN Room.
  *
- * Se pesan 5 jabas vacias; la tara promedio por jaba se guarda en Room como
- * tara del turno (con fecha, hora y responsable) y se aplica a todos los pesajes.
+ * Se pesan 5 jabas vacias; la tara promedio por jaba se guarda en memoria
+ * (DatosMemoria.calibraciones) como tara del turno, con fecha, hora y
+ * responsable, y se aplica a todos los pesajes.
+ *
+ * Las muestras registradas viven en el SavedStateHandle del ViewModel, asi que
+ * no se pierden al rotar la pantalla.
  */
 class CalibrarTaraActivity : AppCompatActivity() {
 
@@ -52,6 +56,7 @@ class CalibrarTaraActivity : AppCompatActivity() {
 
         configurarEventos()
         observarEstado()
+        viewModel.cargarTaraVigente()
         actualizarDisplayPesoMuestra()
         actualizarUiPasoActual(viewModel.pesosMuestra.value?.size ?: 0)
     }
@@ -93,7 +98,7 @@ class CalibrarTaraActivity : AppCompatActivity() {
             viewModel.registrarPesoMuestra(pesoActualMuestra)
         }
 
-        // AGV-015: guarda la tara del turno en Room
+        // AGV-015: guarda la tara del turno en memoria
         binding.btnConfirmarCalibracion.setOnClickListener {
             FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = false)
             viewModel.confirmarYGuardarTara { irARegistrarPesaje() }

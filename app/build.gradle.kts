@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
 android {
@@ -55,13 +54,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
 
-    // Corrutinas
+    // Corrutinas (incluidas por lifecycle-ktx; se declara la version explicita)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Room: persistencia local offline-first (Sprint 1)
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    // NOTA (Sprint 1): NO se usa Room. La persistencia es en memoria mediante
+    // arreglos/listas (DatosMemoria) y SavedStateHandle, tal como exige el curso.
 
     // ZXing: lectura real de QR / Code 128 (sin CameraX ni ML Kit)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")

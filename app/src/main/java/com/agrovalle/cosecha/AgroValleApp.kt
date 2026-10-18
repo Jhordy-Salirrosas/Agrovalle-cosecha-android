@@ -1,31 +1,24 @@
 package com.agrovalle.cosecha
 
 import android.app.Application
-import com.agrovalle.cosecha.data.local.AgroValleDatabase
-import com.agrovalle.cosecha.data.local.PadronSeeder
-import com.agrovalle.cosecha.data.repository.AgroValleRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import com.agrovalle.cosecha.data.DatosMemoria
 
 /**
- * Application de AgroValle Cosecha.
- * Provee la base de datos Room y el repositorio a toda la app, y precarga
- * el padron local de la cuadrilla la primera vez que se abre.
+ * Application de AgroValle Cosecha - Sprint 1.
+ *
+ * Ya NO inicializa ninguna base de datos: la app trabaja enteramente en memoria
+ * a traves del singleton [com.agrovalle.cosecha.data.DatosMemoria], que se
+ * precarga solo con tocarse (inicializacion perezosa del objeto Kotlin).
+ *
+ * Se conserva la clase Application porque el AndroidManifest la declara y
+ * porque es el punto natural para futuras configuraciones globales.
  */
 class AgroValleApp : Application() {
 
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    val database: AgroValleDatabase by lazy { AgroValleDatabase.getInstance(this) }
-
-    val repository: AgroValleRepository by lazy { AgroValleRepository(database) }
-
     override fun onCreate() {
         super.onCreate()
-        appScope.launch {
-            PadronSeeder.sembrarSiVacio(database)
-        }
+        // Tocar el singleton garantiza que el padron de 30 jornaleros quede
+        // cargado en memoria desde el arranque de la aplicacion.
+        DatosMemoria
     }
 }

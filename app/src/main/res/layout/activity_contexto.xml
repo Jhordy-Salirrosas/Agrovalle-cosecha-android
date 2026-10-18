@@ -43,7 +43,7 @@
         android:layout_height="0dp"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="12dp"
-        app:layout_constraintBottom_toTopOf="@id/btnAccionParihuela"
+        app:layout_constraintBottom_toTopOf="@id/btnAsignar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/layoutHeaderContexto">
@@ -53,9 +53,9 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Banner Estado Parihuela -->
+            <!-- Banner: jornalero recibido desde el escaneo de asistencia -->
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardEstadoParihuela"
+                android:id="@+id/cardJornaleroContexto"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
@@ -72,26 +72,26 @@
                     android:padding="12dp">
 
                     <TextView
-                        android:id="@+id/tvEstadoParihuela"
+                        android:id="@+id/tvEstadoAsignacion"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Estado: PARIHUELA NO INICIADA"
+                        android:text="Estado: JORNALERO PENDIENTE DE ASIGNACIÓN"
                         android:textColor="@color/verde_agricola"
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/tvMarbeteInfo"
+                        android:id="@+id/tvNombreJornaleroContexto"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Seleccione los parámetros agronómicos para habilitar el pesaje."
+                        android:text="Esperando datos del jornalero..."
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Card de Parámetros -->
+            <!-- Card de Datos Agronómicos -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -126,27 +126,7 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp" />
 
-                    <!-- CLP -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/clp"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <Spinner
-                        android:id="@+id/spnClp"
-                        android:layout_width="match_parent"
-                        android:layout_height="50dp"
-                        android:layout_marginTop="6dp"
-                        android:background="@drawable/bg_scanner_frame"
-                        android:backgroundTint="@color/verde_suave"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp" />
-
-                    <!-- Variedad -->
+                    <!-- Variedad autocompletada según el cuartel -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -156,29 +136,30 @@
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
-                    <RadioGroup
-                        android:id="@+id/rgVariedad"
+                    <TextView
+                        android:id="@+id/tvVariedadAuto"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="50dp"
                         android:layout_marginTop="6dp"
-                        android:orientation="vertical">
+                        android:background="@drawable/bg_scanner_frame"
+                        android:backgroundTint="@color/verde_suave"
+                        android:gravity="center_vertical"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="--"
+                        android:textColor="@color/verde_oscuro"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        tools:text="Biloxi" />
 
-                        <RadioButton
-                            android:id="@+id/rbBiloxi"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Biloxi (Exportación Fresco)"
-                            android:textColor="@color/text_primary"
-                            android:textSize="14sp" />
-
-                        <RadioButton
-                            android:id="@+id/rbVentura"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Ventura (Calibre Grande)"
-                            android:textColor="@color/text_primary"
-                            android:textSize="14sp" />
-                    </RadioGroup>
+                    <TextView
+                        android:id="@+id/tvAyudaVariedad"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/variedad_auto_ayuda"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -186,14 +167,14 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- Botón Abrir / Cerrar Parihuela -->
+    <!-- Botón ASIGNAR Y FINALIZAR -->
     <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnAccionParihuela"
+        android:id="@+id/btnAsignar"
         android:layout_width="0dp"
         android:layout_height="60dp"
         android:layout_marginBottom="8dp"
         android:enabled="false"
-        android:text="@string/abrir_parihuela"
+        android:text="@string/asignar_y_finalizar"
         android:textColor="@color/white"
         android:textSize="17sp"
         android:textStyle="bold"

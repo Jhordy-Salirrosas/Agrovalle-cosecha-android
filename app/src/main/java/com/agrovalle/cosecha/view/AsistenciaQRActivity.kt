@@ -3,6 +3,7 @@ package com.agrovalle.cosecha.view
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -19,8 +20,12 @@ import com.journeyapps.barcodescanner.ScanOptions
  * Pantalla 03 - Asistencia QR (AGV-001) + acceso al plan B por DNI (AGV-016).
  *
  * El escaneo es REAL: usa ZXing (journeyapps), que no es CameraX ni ML Kit.
- * Toda la validacion (padron, duplicados, tardanza) la resuelve el ViewModel
- * contra la base Room.
+ * La validacion (padron, duplicados, tardanza) la resuelve el ViewModel contra
+ * las listas en memoria de [com.agrovalle.cosecha.data.DatosMemoria].
+ *
+ * Al registrar una asistencia exitosa se muestra el Toast "Asistencia
+ * registrada" y se navega a [ContextoAgronomicoActivity] enviando el ID del
+ * jornalero en el extra `EXTRA_JORNALERO_ID`.
  */
 class AsistenciaQRActivity : AppCompatActivity() {
 
@@ -43,7 +48,8 @@ class AsistenciaQRActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val jornalero = result.data?.getSerializableExtra(BusquedaDNIActivity.EXTRA_JORNALERO) as? Jornalero
+            val jornalero =
+                result.data?.getSerializableExtra(BusquedaDNIActivity.EXTRA_JORNALERO) as? Jornalero
             if (jornalero != null) viewModel.registrarManual(jornalero)
         }
     }
@@ -55,6 +61,12 @@ class AsistenciaQRActivity : AppCompatActivity() {
 
         observarEstado()
         configurarEventos()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Al volver desde ContextoAgronomicoActivity (FLAG_ACTIVITY_CLEAR_TOP) el
+        // contador se refresca con el estado actual de la memoria.
         viewModel.actualizarContador()
     }
 
@@ -101,10 +113,22 @@ class AsistenciaQRActivity : AppCompatActivity() {
                 } else {
                     "Último escaneo exitoso: ${jornalero.codigoQr}"
                 }
+
+            Toast.makeText(this, "Asistencia registrada", Toast.LENGTH_SHORT).show()
+            viewModel.consumirResultado()
+            irAContextoAgronomico(jornalero.id)
         } else {
             FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
             binding.tvEstadoEscaneo.text = resultado.mensaje
+            viewModel.consumirResultado()
         }
-        viewModel.consumirResultado()
+    }
+
+    /** Navega al contexto agronomico enviando el ID del jornalero por el Intent. */
+    private fun irAContextoAgronomico(jornaleroId: Long) {
+        val intent = Intent(this, ContextoAgronomicoActivity::class.java).apply {
+            putExtra(ContextoAgronomicoActivity.EXTRA_JORNALERO_ID, jornaleroId)
+        }
+        startActivity(intent)
     }
 }

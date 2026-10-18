@@ -8,176 +8,146 @@ import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import com.agrovalle.cosecha.R
 import com.agrovalle.cosecha.databinding.ActivityContextoBinding
-import com.agrovalle.cosecha.model.Parihuela
 import com.agrovalle.cosecha.viewmodel.ContextoViewModel
 
 /**
- * Pantalla 05 - Contexto agronomico del turno (AGV-002).
+ * Pantalla 05 - Contexto agronomico del turno (AGV-002) - SIN Room.
  *
- * Cuartel, CLP y variedad se guardan en la parihuela digital (Room). Mientras
- * la parihuela este ABIERTA el contexto queda bloqueado: para cambiar de cuartel
- * o variedad hay que sellarla primero.
+ * Recibe el ID del jornalero por Intent (`EXTRA_JORNALERO_ID`) desde la pantalla
+ * de asistencia. Al elegir un cuartel, la VARIEDAD se autocompleta desde
+ * [com.agrovalle.cosecha.data.DatosMemoria.mapaCuarteles] (ya no se elige a mano).
+ *
+ * Al presionar "ASIGNAR Y FINALIZAR" se guarda en
+ * [com.agrovalle.cosecha.data.DatosMemoria.asignaciones] que jornalero va a que
+ * cuartel y se vuelve al escaneo con FLAG_ACTIVITY_CLEAR_TOP para recibir al
+ * siguiente jornalero.
  */
 class ContextoAgronomicoActivity : AppCompatActivity() {
 
     companion object {
-        const val EXTRA_CUARTEL = "extra_cuartel"
-        const val EXTRA_VARIEDAD = "extra_variedad"
-        const val EXTRA_PARIHUELA_ID = "extra_parihuela_id"
-        const val EXTRA_MARBETE = "extra_marbete"
-
-        private const val KEY_POS_CUARTEL = "key_pos_cuartel"
-        private const val KEY_POS_CLP = "key_pos_clp"
-        private const val KEY_BILOXI = "key_biloxi"
-        private const val KEY_VENTURA = "key_ventura"
+        /** ID del jornalero enviado desde AsistenciaQRActivity. */
+        const val EXTRA_JORNALERO_ID = "EXTRA_JORNALERO_ID"
     }
 
     private lateinit var binding: ActivityContextoBinding
     private val viewModel: ContextoViewModel by viewModels()
 
-    private var estaParihuelaAbierta = false
+    /**
+     * El Spinner dispara `onItemSelected` una vez al inicializarse. Mientras
+     * este en `true` se ignoran esos eventos para no pisar el cuartel que se
+     * recupera desde el SavedStateHandle.
+     */
+    private var ignorarSeleccionInicial = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityContextoBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        configurarSpinners()
+        configurarSpinnerCuartel()
         configurarListeners()
-
-        if (savedInstanceState != null) {
-            binding.spnCuartel.setSelection(savedInstanceState.getInt(KEY_POS_CUARTEL, 0))
-            binding.spnClp.setSelection(savedInstanceState.getInt(KEY_POS_CLP, 0))
-            binding.rbBiloxi.isChecked = savedInstanceState.getBoolean(KEY_BILOXI, false)
-            binding.rbVentura.isChecked = savedInstanceState.getBoolean(KEY_VENTURA, false)
-        }
-
         observarEstado()
-        viewModel.cargarEstado()
+
+        // 1) Se recupera el jornalero enviado por el Intent.
+        val jornaleroId = intent.getLongExtra(EXTRA_JORNALERO_ID, 0L)
+        viewModel.cargarJornalero(jornaleroId)
+
+        // 2) Se pinta la seleccion guardada (cuartel + variedad).
+        sincronizarDesdeViewModel()
+
+        // 3) A partir de aqui el usuario ya manda: los cambios del Spinner cuentan.
+        ignorarSeleccionInicial = false
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putInt(KEY_POS_CUARTEL, binding.spnCuartel.selectedItemPosition)
-        outState.putInt(KEY_POS_CLP, binding.spnClp.selectedItemPosition)
-        outState.putBoolean(KEY_BILOXI, binding.rbBiloxi.isChecked)
-        outState.putBoolean(KEY_VENTURA, binding.rbVentura.isChecked)
-    }
-
-    private fun configurarSpinners() {
-        val cuarteles = listOf(
-            "Seleccione Cuartel...", "Cuartel 01", "Cuartel 05", "Cuartel 12", "Cuartel 18"
+    private fun configurarSpinnerCuartel() {
+        binding.spnCuartel.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            viewModel.cuarteles()
         )
-        binding.spnCuartel.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, cuarteles)
-
-        val clps = listOf(
-            "Seleccione CLP...", "CLP-01 (Virú Central)", "CLP-02 (Virú Sur)", "CLP-03 (Chao Norte)"
-        )
-        binding.spnClp.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, clps)
     }
 
     private fun configurarListeners() {
         binding.btnVolverContexto.setOnClickListener { finish() }
 
-        val itemSelectedListener = object : AdapterView.OnItemSelectedListener {
+        binding.spnCuartel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
                 parent: AdapterView<*>?,
                 view: View?,
                 position: Int,
                 id: Long
             ) {
-                validarFormulario()
+                // Se descarta el evento automatico del arranque.
+                if (ignorarSeleccionInicial) return
+
+                val cuartel = parent?.getItemAtPosition(position)?.toString() ?: return
+                viewModel.seleccionarCuartel(cuartel)
+                mostrarVariedad(viewModel.variedadActual())
+                actualizarBotonAsignar()
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {
-                validarFormulario()
+                if (ignorarSeleccionInicial) return
+                actualizarBotonAsignar()
             }
         }
 
-        binding.spnCuartel.onItemSelectedListener = itemSelectedListener
-        binding.spnClp.onItemSelectedListener = itemSelectedListener
-        binding.rgVariedad.setOnCheckedChangeListener { _, _ -> validarFormulario() }
-
-        binding.btnAccionParihuela.setOnClickListener {
-            if (estaParihuelaAbierta) cerrarParihuela() else abrirParihuela()
-        }
+        binding.btnAsignar.setOnClickListener { asignarYFinalizar() }
     }
 
     private fun observarEstado() {
-        viewModel.parihuelaAbierta.observe(this) { parihuela ->
-            estaParihuelaAbierta = parihuela != null
-            actualizarUiEstadoParihuela(parihuela)
+        viewModel.jornalero.observe(this) { jornalero ->
+            if (jornalero == null) {
+                binding.tvEstadoAsignacion.text = "Estado: JORNALERO NO ENCONTRADO"
+                binding.tvNombreJornaleroContexto.text =
+                    "Vuelva a escanear el fotocheck del jornalero."
+            } else {
+                binding.tvEstadoAsignacion.text = "Estado: JORNALERO ESCANEADO"
+                binding.tvNombreJornaleroContexto.text =
+                    "${jornalero.nombreCompleto} • DNI ${jornalero.dni} • Cuadrilla ${jornalero.cuadrillaCodigo}"
+            }
+            actualizarBotonAsignar()
         }
         viewModel.mensaje.observe(this) { mensaje ->
             if (!mensaje.isNullOrBlank()) {
-                Toast.makeText(this, mensaje, Toast.LENGTH_LONG).show()
+                Toast.makeText(this, mensaje, Toast.LENGTH_SHORT).show()
                 viewModel.consumirMensaje()
             }
         }
     }
 
-    private fun validarFormulario() {
-        if (estaParihuelaAbierta) {
-            binding.btnAccionParihuela.isEnabled = true
-            return
+    /** Coloca el Spinner en el cuartel guardado en el ViewModel y pinta la variedad. */
+    private fun sincronizarDesdeViewModel() {
+        val cuartel = viewModel.cuartelSeleccionado
+        val posicion = viewModel.cuarteles().indexOf(cuartel)
+        if (posicion >= 0) {
+            binding.spnCuartel.setSelection(posicion)
         }
-        val cuartelValido = binding.spnCuartel.selectedItemPosition > 0
-        val clpValido = binding.spnClp.selectedItemPosition > 0
-        val variedadValida = binding.rbBiloxi.isChecked || binding.rbVentura.isChecked
-        binding.btnAccionParihuela.isEnabled = cuartelValido && clpValido && variedadValida
+        mostrarVariedad(viewModel.variedadActual())
+        actualizarBotonAsignar()
     }
 
-    private fun abrirParihuela() {
-        val cuartel = binding.spnCuartel.selectedItem.toString()
-        val clp = binding.spnClp.selectedItem.toString()
-        val variedad = if (binding.rbBiloxi.isChecked) "Biloxi" else "Ventura"
-
-        viewModel.abrirParihuela(cuartel, clp, variedad) { parihuela ->
-            val intent = Intent(this, CalibrarTaraActivity::class.java).apply {
-                putExtra(EXTRA_CUARTEL, parihuela.cuartel)
-                putExtra(EXTRA_VARIEDAD, parihuela.variedad)
-                putExtra(EXTRA_PARIHUELA_ID, parihuela.id)
-                putExtra(EXTRA_MARBETE, parihuela.codigoMarbete)
-            }
-            startActivity(intent)
-        }
+    /** Pinta la variedad autocompletada o el placeholder. */
+    private fun mostrarVariedad(variedad: String?) {
+        binding.tvVariedadAuto.text = variedad ?: "--"
     }
 
-    private fun cerrarParihuela() {
-        viewModel.cerrarParihuela()
-        binding.spnCuartel.setSelection(0)
-        binding.spnClp.setSelection(0)
-        binding.rgVariedad.clearCheck()
-        validarFormulario()
+    private fun actualizarBotonAsignar() {
+        binding.btnAsignar.isEnabled = viewModel.puedeAsignar()
     }
 
-    private fun actualizarUiEstadoParihuela(parihuela: Parihuela?) {
-        if (parihuela != null) {
-            binding.tvEstadoParihuela.text =
-                "Estado: PARIHUELA ABIERTA (${parihuela.codigoMarbete})"
-            binding.tvMarbeteInfo.text =
-                "Contexto bloqueado: ${parihuela.cuartel} • ${parihuela.variedad} • ${parihuela.totalJabas} jabas"
-            binding.btnAccionParihuela.text = getString(R.string.cerrar_parihuela)
+    /**
+     * AGV-002: guarda la asignacion jornalero -> cuartel y vuelve al escaneo
+     * con FLAG_ACTIVITY_CLEAR_TOP para recibir al siguiente jornalero.
+     */
+    private fun asignarYFinalizar() {
+        if (!viewModel.asignarYFinalizar()) return
 
-            binding.spnCuartel.isEnabled = false
-            binding.spnClp.isEnabled = false
-            binding.rbBiloxi.isEnabled = false
-            binding.rbVentura.isEnabled = false
-        } else {
-            binding.tvEstadoParihuela.text = "Estado: PARIHUELA NO INICIADA"
-            binding.tvMarbeteInfo.text =
-                "Seleccione los parámetros agronómicos para habilitar el pesaje."
-            binding.btnAccionParihuela.text = getString(R.string.abrir_parihuela)
-
-            binding.spnCuartel.isEnabled = true
-            binding.spnClp.isEnabled = true
-            binding.rbBiloxi.isEnabled = true
-            binding.rbVentura.isEnabled = true
-            validarFormulario()
+        val intent = Intent(this, AsistenciaQRActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+        startActivity(intent)
+        finish()
     }
 }

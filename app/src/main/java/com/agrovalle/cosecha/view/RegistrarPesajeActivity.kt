@@ -15,20 +15,20 @@ import com.journeyapps.barcodescanner.ScanOptions
 import java.util.Locale
 
 /**
- * Pantalla 07 - Registro de pesaje en campo (AGV-003).
+ * Pantalla 07 - Registro de pesaje en campo (AGV-003) - SIN Room.
  *
- * Peso Neto = Peso Bruto - (Tara * Jabas). La tara sale de la calibracion
- * guardada en Room; el pesaje se persiste de forma ATOMICA y las jabas se
- * suman a la parihuela abierta.
+ * Peso Neto = Peso Bruto - (Tara * Jabas). La tara sale de la ultima calibracion
+ * guardada en memoria (DatosMemoria.calibraciones); el pesaje se agrega a la
+ * bitacora en memoria y el acumulado diario se calcula sumando esos pesajes.
+ *
+ * El peso en curso y la cantidad de jabas viven en el SavedStateHandle del
+ * ViewModel (AGV-003 + ciclo de vida).
  */
 class RegistrarPesajeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRegistrarPesajeBinding
     private val viewModel: PesajeViewModel by viewModels()
 
-    private var jornaleroActual: Jornalero? = null
-    private var entradaPesoBruto: String = ""
-    private var cantidadJabas: Int = 0
     private var taraAplicada: Double = Constantes.TARA_POR_DEFECTO
     private var esTaraPorDefecto: Boolean = true
 
@@ -36,10 +36,6 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         const val EXTRA_PESO_NETO = "extra_peso_neto"
         const val EXTRA_ACUMULADO_DIARIO = "extra_acumulado_diario"
         const val EXTRA_ES_TARA_CALIBRADA = "extra_es_tara_calibrada"
-
-        private const val KEY_JORNALERO = "key_jornalero_pesaje"
-        private const val KEY_ENTRADA_PESO = "key_entrada_peso"
-        private const val KEY_CANTIDAD_JABAS = "key_cantidad_jabas"
     }
 
     /** Escaneo REAL del fotocheck del jornalero (ZXing). */
@@ -48,7 +44,6 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         if (!contenido.isNullOrBlank()) identificarPorQr(contenido)
     }
 
-    @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityRegistrarPesajeBinding.inflate(layoutInflater)
@@ -61,30 +56,24 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         configurarBotonGuardar()
         observarViewModel()
 
-        if (savedInstanceState != null) {
-            entradaPesoBruto = savedInstanceState.getString(KEY_ENTRADA_PESO) ?: ""
-            cantidadJabas = savedInstanceState.getInt(KEY_CANTIDAD_JABAS, 0)
-            val jornalero = savedInstanceState.getSerializable(KEY_JORNALERO) as? Jornalero
-            jornalero?.let { mostrarJornalero(it) }
+        // Tara vigente del turno: calibrada (en memoria) o por defecto.
+        viewModel.cargarTaraVigente()
+
+        // Restaura el jornalero y los valores en curso tras una rotacion.
+        val jornalero = viewModel.jornaleroActual()
+        if (jornalero != null) {
+            mostrarJornalero(jornalero)
         } else {
             limpiarCampos()
         }
-
-        // Tara vigente del turno: calibrada (Room) o por defecto
-        viewModel.cargarTaraVigente()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putSerializable(KEY_JORNALERO, jornaleroActual)
-        outState.putString(KEY_ENTRADA_PESO, entradaPesoBruto)
-        outState.putInt(KEY_CANTIDAD_JABAS, cantidadJabas)
+        actualizarCalculos()
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // "Siguiente jornalero": limpia el formulario sin apilar Activities
+        // "Siguiente jornalero": limpia el formulario sin apilar Activities.
+        viewModel.limpiarPesajeEnCurso()
         limpiarCampos()
     }
 
@@ -149,7 +138,6 @@ class RegistrarPesajeActivity : AppCompatActivity() {
     }
 
     private fun mostrarJornalero(jornalero: Jornalero) {
-        jornaleroActual = jornalero
         binding.tvNombreJornaleroPesaje.text =
             "Fotocheck identificado: ${jornalero.nombreCompleto}"
         binding.tvEstadoAsistenciaJornalero.text =
@@ -161,16 +149,16 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         binding.btnJabaMas4.setOnClickListener { sumarJabas(4) }
         binding.btnJabaMas6.setOnClickListener { sumarJabas(6) }
         binding.btnJabaMenos1.setOnClickListener {
-            if (jornaleroActual != null && cantidadJabas > 0) {
-                cantidadJabas -= 1
+            if (viewModel.hayJornalero() && viewModel.cantidadJabas > 0) {
+                viewModel.cantidadJabas = viewModel.cantidadJabas - 1
                 actualizarCalculos()
             }
         }
     }
 
     private fun sumarJabas(cantidad: Int) {
-        if (jornaleroActual != null) {
-            cantidadJabas += cantidad
+        if (viewModel.hayJornalero()) {
+            viewModel.cantidadJabas = viewModel.cantidadJabas + cantidad
             actualizarCalculos()
         }
     }
@@ -192,10 +180,11 @@ class RegistrarPesajeActivity : AppCompatActivity() {
 
         for ((btn, char) in teclas) {
             btn.setOnClickListener {
-                if (jornaleroActual != null) {
-                    if (char == "." && entradaPesoBruto.contains(".")) return@setOnClickListener
-                    if (entradaPesoBruto.length < 6) {
-                        entradaPesoBruto += char
+                if (viewModel.hayJornalero()) {
+                    val entrada = viewModel.entradaPesoBruto
+                    if (char == "." && entrada.contains(".")) return@setOnClickListener
+                    if (entrada.length < 6) {
+                        viewModel.entradaPesoBruto = entrada + char
                         actualizarCalculos()
                     }
                 }
@@ -203,19 +192,21 @@ class RegistrarPesajeActivity : AppCompatActivity() {
         }
 
         binding.btnPClear.setOnClickListener {
-            if (jornaleroActual != null) {
-                entradaPesoBruto = ""
+            if (viewModel.hayJornalero()) {
+                viewModel.entradaPesoBruto = ""
                 actualizarCalculos()
             }
         }
     }
 
     private fun actualizarCalculos() {
-        val pesoBruto = entradaPesoBruto.toDoubleOrNull() ?: 0.0
+        val pesoBruto = viewModel.pesoBrutoActual()
+        val cantidadJabas = viewModel.cantidadJabas
         val taraTotal = viewModel.calcularTaraTotal(cantidadJabas)
         val pesoNeto = viewModel.calcularPesoNeto(pesoBruto, cantidadJabas)
 
-        binding.tvPesoBrutoValor.text = if (entradaPesoBruto.isEmpty()) "0.00" else entradaPesoBruto
+        binding.tvPesoBrutoValor.text =
+            if (viewModel.entradaPesoBruto.isEmpty()) "0.00" else viewModel.entradaPesoBruto
         binding.tvCantidadJabas.text = cantidadJabas.toString()
 
         binding.tvTaraAplicada.text =
@@ -228,16 +219,17 @@ class RegistrarPesajeActivity : AppCompatActivity() {
             String.format(Locale.US, "%.2f - %.2f = %.2f kg", pesoBruto, taraTotal, pesoNeto)
 
         binding.btnGuardarPesaje.isEnabled =
-            jornaleroActual != null && viewModel.validarRango(pesoBruto, cantidadJabas)
+            viewModel.hayJornalero() && viewModel.validarRango(pesoBruto, cantidadJabas)
     }
 
     private fun configurarBotonGuardar() {
         binding.btnGuardarPesaje.setOnClickListener {
-            val jornalero = jornaleroActual ?: return@setOnClickListener
-            val pesoBruto = entradaPesoBruto.toDoubleOrNull() ?: 0.0
+            val jornalero = viewModel.jornaleroActual() ?: return@setOnClickListener
+            val pesoBruto = viewModel.pesoBrutoActual()
+            val cantidadJabas = viewModel.cantidadJabas
 
             viewModel.persistirPesaje(jornalero, pesoBruto, cantidadJabas) { pesoNeto, porDefecto ->
-                // AGV-004: acumulado diario real del cosechador
+                // AGV-004: acumulado diario real del cosechador (suma en memoria).
                 viewModel.cargarAcumuladoDiario(jornalero.id) { acumulado ->
                     val intent = Intent(this, ConfirmacionActivity::class.java).apply {
                         putExtra(EXTRA_PESO_NETO, pesoNeto)
@@ -251,10 +243,6 @@ class RegistrarPesajeActivity : AppCompatActivity() {
     }
 
     private fun limpiarCampos() {
-        jornaleroActual = null
-        entradaPesoBruto = ""
-        cantidadJabas = 0
-
         binding.tvNombreJornaleroPesaje.text = "Escanea el fotocheck para comenzar"
         binding.tvEstadoAsistenciaJornalero.text = "Esperando escaneo..."
         binding.tvPesoBrutoValor.text = "0.00"

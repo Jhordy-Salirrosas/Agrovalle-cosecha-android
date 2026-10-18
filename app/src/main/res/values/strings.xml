@@ -31,11 +31,11 @@
     <string name="confirmar_asistencia">Confirmar Asistencia</string>
 
     <!-- Contexto Agronómico -->
-    <string name="abrir_parihuela">Abrir Parihuela</string>
-    <string name="cerrar_parihuela">Cerrar Parihuela</string>
     <string name="cuartel">Cuartel</string>
-    <string name="clp">CLP (Código Lugar Producción)</string>
     <string name="variedad">Variedad de Arándano</string>
+    <string name="asignar_y_finalizar">ASIGNAR Y FINALIZAR</string>
+    <string name="variedad_auto_ayuda">La variedad se asigna automáticamente según el cuartel elegido.</string>
+    <string name="asistencia_registrada_toast">Asistencia registrada</string>
 
     <!-- Calibrar Tara -->
     <string name="calibrar_tara">Calibrar Tara</string>

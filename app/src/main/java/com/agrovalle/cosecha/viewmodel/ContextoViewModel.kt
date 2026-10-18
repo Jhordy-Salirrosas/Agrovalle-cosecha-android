@@ -1,92 +1,104 @@
 package com.agrovalle.cosecha.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.viewModelScope
-import com.agrovalle.cosecha.AgroValleApp
-import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
-import com.agrovalle.cosecha.data.mapper.aDominio
-import com.agrovalle.cosecha.model.Parihuela
-import com.agrovalle.cosecha.util.Constantes
-import kotlinx.coroutines.launch
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import com.agrovalle.cosecha.data.DatosMemoria
+import com.agrovalle.cosecha.model.Jornalero
 
 /**
- * AGV-002: contexto agronomico del turno (cuartel, CLP, variedad y parihuela).
+ * AGV-002: contexto agronomico del turno - SIN Room.
  *
- * Regla de negocio: mientras exista una parihuela ABIERTA no se puede cambiar
- * el contexto; primero debe sellarse.
+ * La variedad se AUTOCOMPLETA a partir del cuartel (DatosMemoria.mapaCuarteles)
+ * y al presionar "ASIGNAR Y FINALIZAR" se guarda en
+ * [DatosMemoria.asignaciones] que jornalero va a que cuartel.
+ *
+ * El estado del formulario (cuartel elegido) se conserva en
+ * [SavedStateHandle] para sobrevivir a la rotacion o a la muerte del proceso.
  */
-class ContextoViewModel(app: Application) : AndroidViewModel(app) {
+class ContextoViewModel(
+    private val savedStateHandle: SavedStateHandle
+) : ViewModel() {
 
-    private val repo = (app as AgroValleApp).repository
+    private val _jornalero = MutableLiveData<Jornalero?>(null)
+    val jornalero: LiveData<Jornalero?> = _jornalero
 
-    private val _parihuelaAbierta = MutableLiveData<Parihuela?>(null)
-    val parihuelaAbierta: LiveData<Parihuela?> = _parihuelaAbierta
+    private val _variedadAuto = MutableLiveData<String?>(null)
+    val variedadAuto: LiveData<String?> = _variedadAuto
 
     private val _mensaje = MutableLiveData<String?>(null)
     val mensaje: LiveData<String?> = _mensaje
 
-    fun cargarEstado() {
-        viewModelScope.launch {
-            _parihuelaAbierta.value = repo.getParihuelaAbierta()?.aDominio()
+    /** Cuartel elegido en el Spinner; se persiste entre rotaciones. */
+    var cuartelSeleccionado: String
+        get() = savedStateHandle[KEY_CUARTEL] ?: CUARTEL_VACIO
+        set(value) {
+            savedStateHandle[KEY_CUARTEL] = value
+            _variedadAuto.value = DatosMemoria.obtenerVariedadPorCuartel(value)
+        }
+
+    /** ID recibido por Intent (EXTRA_JORNALERO_ID). */
+    var jornaleroId: Long
+        get() = savedStateHandle[KEY_JORNALERO_ID] ?: 0L
+        set(value) {
+            savedStateHandle[KEY_JORNALERO_ID] = value
+        }
+
+    /** Opciones del Spinner de cuartel. */
+    fun cuarteles(): List<String> = DatosMemoria.opcionesCuartel
+
+    /** Carga el jornalero recibido y pre-selecciona su cuartel si ya tenia uno. */
+    fun cargarJornalero(id: Long) {
+        jornaleroId = id
+        val encontrado = DatosMemoria.buscarJornaleroPorId(id)
+        _jornalero.value = encontrado
+
+        val asignado = DatosMemoria.obtenerCuartelAsignado(id)
+        if (asignado != null) {
+            cuartelSeleccionado = asignado
+        } else {
+            _variedadAuto.value = DatosMemoria.obtenerVariedadPorCuartel(cuartelSeleccionado)
         }
     }
 
     /**
-     * Abre una parihuela nueva con el contexto elegido. [onAbierta] recibe la
-     * parihuela creada para continuar con la calibracion de tara.
+     * Cambia el cuartel y autocompleta la variedad.
+     * @return la variedad asociada, o `null` si el cuartel no es valido.
      */
-    fun abrirParihuela(
-        cuartel: String,
-        clp: String,
-        variedad: String,
-        onAbierta: (Parihuela) -> Unit
-    ) {
-        viewModelScope.launch {
-            if (repo.getParihuelaAbierta() != null) {
-                _mensaje.value =
-                    "Ya existe una parihuela abierta. Selle la parihuela en curso para continuar."
-                return@launch
-            }
-
-            val correlativo = repo.contarParihuelas() + 1
-            val codigoMarbete = "MARB-%03d".format(correlativo)
-
-            val id = repo.abrirParihuela(
-                ParihuelaEntity(
-                    codigoMarbete = codigoMarbete,
-                    cuartel = cuartel,
-                    variedad = variedad,
-                    clp = clp,
-                    totalJabas = 0,
-                    estado = ParihuelaEntity.ESTADO_ABIERTA
-                )
-            )
-
-            val creada = Parihuela(
-                id = id,
-                codigoMarbete = codigoMarbete,
-                cuartel = cuartel,
-                variedad = variedad,
-                clp = clp,
-                totalJabas = 0,
-                estado = ParihuelaEntity.ESTADO_ABIERTA
-            )
-            _parihuelaAbierta.value = creada
-            _mensaje.value = "Parihuela $codigoMarbete abierta. Continúe con la calibración de tara."
-            onAbierta(creada)
-        }
+    fun seleccionarCuartel(cuartel: String): String? {
+        cuartelSeleccionado = cuartel
+        return _variedadAuto.value
     }
 
-    fun cerrarParihuela() {
-        viewModelScope.launch {
-            val abierta = repo.getParihuelaAbierta() ?: return@launch
-            repo.cerrarParihuela(abierta)
-            _parihuelaAbierta.value = null
-            _mensaje.value = "Parihuela ${abierta.codigoMarbete} sellada correctamente."
+    /** La variedad actual ya calculada. */
+    fun variedadActual(): String? = _variedadAuto.value
+
+    /** Habilita el boton solo si el cuartel es valido y hay jornalero cargado. */
+    fun puedeAsignar(): Boolean = esCuartelValido() && _jornalero.value != null
+
+    private fun esCuartelValido(): Boolean = cuartelSeleccionado != CUARTEL_VACIO
+
+    /**
+     * AGV-002: guarda la asignacion jornalero -> cuartel en memoria.
+     * @return `true` si se guardo correctamente.
+     */
+    fun asignarYFinalizar(): Boolean {
+        val jornaleroActual = _jornalero.value
+        if (jornaleroActual == null) {
+            _mensaje.value = "No se recibió un jornalero válido. Vuelva a escanear su fotocheck."
+            return false
         }
+        if (!esCuartelValido()) {
+            _mensaje.value = "Seleccione un cuartel para continuar."
+            return false
+        }
+
+        DatosMemoria.asignarCuartel(jornaleroActual.id, cuartelSeleccionado)
+        val variedad = DatosMemoria.obtenerVariedadPorCuartel(cuartelSeleccionado) ?: "-"
+        _mensaje.value =
+            "${jornaleroActual.nombreCompleto} asignado a $cuartelSeleccionado ($variedad)"
+        return true
     }
 
     fun consumirMensaje() {
@@ -94,8 +106,10 @@ class ContextoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        /** Estandar de estiba usado por la HU (100 a 120 jabas). */
-        const val JABAS_MIN = Constantes.JABAS_ESTANDAR_MIN
-        const val JABAS_MAX = Constantes.JABAS_ESTANDAR_MAX
+        /** Texto del prompt del Spinner; nunca es un cuartel seleccionable. */
+        const val CUARTEL_VACIO = "Seleccione Cuartel..."
+
+        private const val KEY_CUARTEL = "key_contexto_cuartel"
+        private const val KEY_JORNALERO_ID = "key_contexto_jornalero_id"
     }
 }

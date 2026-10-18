@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.databinding.ActivityBusquedaDniBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.viewmodel.AsistenciaViewModel
@@ -14,16 +15,16 @@ import com.agrovalle.cosecha.viewmodel.AsistenciaViewModel
  * Pantalla 04 - Busqueda por DNI (AGV-016, plan B de AGV-001).
  *
  * El capataz ingresa los ULTIMOS 4 DIGITOS con el selector numerico y el sistema
- * busca coincidencias en el padron local (Room). Al confirmar se devuelve el
- * jornalero para registrar el ingreso manual en la bitacora.
+ * busca coincidencias en el padron EN MEMORIA (DatosMemoria). Al confirmar se
+ * devuelve el jornalero para registrar el ingreso manual.
+ *
+ * Los digitos y el jornalero encontrado viven en el SavedStateHandle del
+ * ViewModel, de modo que la busqueda sobrevive a la rotacion de pantalla.
  */
 class BusquedaDNIActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityBusquedaDniBinding
     private val viewModel: AsistenciaViewModel by viewModels()
-
-    private var digitosIngresados: String = ""
-    private var jornaleroEncontrado: Jornalero? = null
 
     companion object {
         const val EXTRA_JORNALERO = "extra_jornalero"
@@ -31,32 +32,44 @@ class BusquedaDNIActivity : AppCompatActivity() {
         const val EXTRA_DNI_JORNALERO = "extra_dni_jornalero"
 
         private const val MAX_DIGITOS = 4
-        private const val KEY_DIGITOS = "key_digitos"
-        private const val KEY_JORNALERO = "key_jornalero"
+        private const val KEY_JORNALERO = "key_jornalero_busqueda"
     }
 
-    @Suppress("DEPRECATION")
+    private var jornaleroEncontrado: Jornalero? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBusquedaDniBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         if (savedInstanceState != null) {
-            digitosIngresados = savedInstanceState.getString(KEY_DIGITOS) ?: ""
-            jornaleroEncontrado = savedInstanceState.getSerializable(KEY_JORNALERO) as? Jornalero
+            jornaleroEncontrado = buscarJornaleroGuardado(savedInstanceState)
         }
 
         configurarTeclado()
         configurarEventos()
         observarCoincidencias()
         actualizarDisplay()
-        jornaleroEncontrado?.let { mostrarResultado(it) }
+
+        val recuperado = jornaleroEncontrado
+        if (recuperado != null) {
+            mostrarResultado(recuperado)
+        } else if (viewModel.ultimosDigitos.isNotEmpty()) {
+            // Tras una rotacion se repite la busqueda con los digitos conservados.
+            viewModel.buscarPorUltimosDigitos(viewModel.ultimosDigitos)
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putString(KEY_DIGITOS, digitosIngresados)
-        outState.putSerializable(KEY_JORNALERO, jornaleroEncontrado)
+        outState.putLong(KEY_JORNALERO, jornaleroEncontrado?.id ?: 0L)
+    }
+
+    /** Recupera el jornalero desde el padron en memoria usando su id. */
+    private fun buscarJornaleroGuardado(state: Bundle): Jornalero? {
+        val id = state.getLong(KEY_JORNALERO, 0L)
+        if (id == 0L) return null
+        return DatosMemoria.buscarJornaleroPorId(id)
     }
 
     private fun configurarTeclado() {
@@ -75,17 +88,19 @@ class BusquedaDNIActivity : AppCompatActivity() {
 
         for ((boton, digito) in botonesNumericos) {
             boton.setOnClickListener {
-                if (digitosIngresados.length < MAX_DIGITOS) {
-                    digitosIngresados += digito
+                val actuales = viewModel.ultimosDigitos
+                if (actuales.length < MAX_DIGITOS) {
+                    viewModel.ultimosDigitos = actuales + digito
                     actualizarDisplay()
                 }
             }
         }
 
         binding.btnKeyClear.setOnClickListener {
-            if (digitosIngresados.isNotEmpty()) {
-                digitosIngresados = digitosIngresados.dropLast(1)
-                if (digitosIngresados.isEmpty()) limpiarResultado()
+            val actuales = viewModel.ultimosDigitos
+            if (actuales.isNotEmpty()) {
+                viewModel.ultimosDigitos = actuales.dropLast(1)
+                if (viewModel.ultimosDigitos.isEmpty()) limpiarResultado()
                 actualizarDisplay()
             }
         }
@@ -111,7 +126,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
 
     private fun observarCoincidencias() {
         viewModel.coincidencias.observe(this) { lista ->
-            if (digitosIngresados.isEmpty()) return@observe
+            if (viewModel.ultimosDigitos.isEmpty()) return@observe
             val primero = lista.firstOrNull()
             if (primero != null) {
                 jornaleroEncontrado = primero
@@ -124,18 +139,20 @@ class BusquedaDNIActivity : AppCompatActivity() {
     }
 
     private fun actualizarDisplay() {
-        if (digitosIngresados.isEmpty()) {
+        val digitos = viewModel.ultimosDigitos
+        if (digitos.isEmpty()) {
             binding.tvDisplayDni.text = "____"
             binding.btnKeyBuscar.isEnabled = false
         } else {
-            binding.tvDisplayDni.text = digitosIngresados
+            binding.tvDisplayDni.text = digitos
             binding.btnKeyBuscar.isEnabled = true
         }
     }
 
     private fun ejecutarBusqueda() {
-        if (digitosIngresados.isEmpty()) return
-        viewModel.buscarPorUltimosDigitos(digitosIngresados)
+        val digitos = viewModel.ultimosDigitos
+        if (digitos.isEmpty()) return
+        viewModel.buscarPorUltimosDigitos(digitos)
     }
 
     private fun mostrarResultado(jornalero: Jornalero) {
@@ -150,7 +167,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
         binding.cardResultado.visibility = View.GONE
         binding.tvEstadoVacio.visibility = View.VISIBLE
         binding.tvEstadoVacio.text =
-            "No se encontró ningún jornalero con DNI que termine en '$digitosIngresados'"
+            "No se encontró ningún jornalero con DNI que termine en '${viewModel.ultimosDigitos}'"
     }
 
     private fun limpiarResultado() {
