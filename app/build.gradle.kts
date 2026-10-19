@@ -37,11 +37,23 @@ android {
     }
 
     buildFeatures {
+        // SOLO viewBinding. Sin dataBinding (evita conflictos con la compilacion
+        // de la variante UnitTest en Gradle).
         viewBinding = true
+    }
+
+    testOptions {
+        // Fuerza JUnit 4 en todas las tareas de test unitario (app/src/test).
+        unitTests.all {
+            it.useJUnit()
+        }
     }
 }
 
 dependencies {
+    // ------------------------------------------------------------------
+    // App
+    // ------------------------------------------------------------------
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
@@ -63,7 +75,15 @@ dependencies {
     // ZXing: lectura real de QR / Code 128 (sin CameraX ni ML Kit)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
+    // ------------------------------------------------------------------
+    // Tests unitarios (app/src/test) -> se ejecutan en la JVM local
+    // ------------------------------------------------------------------
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.22")
+
+    // ------------------------------------------------------------------
+    // Tests instrumentados (app/src/androidTest) -> requieren dispositivo/emulador
+    // ------------------------------------------------------------------
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
