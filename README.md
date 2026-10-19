@@ -228,11 +228,28 @@ los valores deben conservarse (los guarda `SavedStateHandle`, no la Activity).
 
 ## 🧪 Pruebas Unitarias
 
-En `app/src/test/java/com/agrovalle/cosecha/util/`:
+En `app/src/test/java/com/agrovalle/cosecha/util/` (33 pruebas en total):
 
-- `CalculadoraPesajeTest`: peso neto con 3, 4 y 6 jabas (8.37 / 8.00 / 7.25 kg), neto nunca negativo,
-  rango válido y tara calibrada entre 350 y 400 g.
-- `FechaHoraUtilTest`: detección de tardanza en jornada mañana y tarde.
+- `CalculadoraPesajeTest` (21): peso neto con 3, 4 y 6 jabas (8.37 / 8.00 / 7.25 kg), neto nunca
+  negativo, límites exactos de peso bruto, tara calibrada entre 350 y 400 g (incluidas jabas
+  pesadas y livianas fuera de rango) y valor de `TOTAL_CUADRILLA`.
+- `FechaHoraUtilTest` (12): conversión de hora a minutos y detección de tardanza en jornada
+  mañana (06:15) y tarde (14:15), con casos borde.
+
+**Convención de nombres:** los métodos de test usan **camelCase sin espacios**
+(ej. `testPesaje4Jabas()`), **no** comillas invertidas. En Windows, la tarea de Gradle
+`testDebugUnitTest` fallaba con `java.lang.ClassNotFoundException` al usar nombres con espacios.
+
+**Aislamiento:** las pruebas solo tocan código puro de Kotlin (`CalculadoraPesaje`,
+`FechaHoraUtil`, `Constantes`). **No** se referencia `DatosMemoria` en los tests, porque al
+inicializarse arrastra dependencias del framework de Android y rompe la ejecución en la JVM.
+
+Para ejecutarlas:
+
+```bash
+./gradlew testDebugUnitTest
+```
+
 
 ---
 

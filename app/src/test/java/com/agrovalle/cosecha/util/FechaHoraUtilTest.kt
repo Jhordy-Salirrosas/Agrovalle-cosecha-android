@@ -11,6 +11,10 @@ import org.junit.Test
  *
  * Tardanza = el ingreso ocurre EN o DESPUES del minuto limite (incluye el
  * segundo exacto, p. ej. 06:15:00 ya es tardanza).
+ *
+ * NOTA: los nombres de los metodos NO usan comillas invertidas ni espacios,
+ * para que la tarea de Gradle `testDebugUnitTest` pueda ejecutarlos tambien en
+ * Windows sin lanzar java.lang.ClassNotFoundException.
  */
 class FechaHoraUtilTest {
 
@@ -19,7 +23,7 @@ class FechaHoraUtilTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `convierte una hora a minutos del dia`() {
+    fun testConvierteHoraAMinutosDelDia() {
         assertEquals(0, FechaHoraUtil.enMinutos("00:00:00"))
         assertEquals(375, FechaHoraUtil.enMinutos("06:15:00"))
         assertEquals(840, FechaHoraUtil.enMinutos("14:00:00"))
@@ -27,13 +31,13 @@ class FechaHoraUtilTest {
     }
 
     @Test
-    fun `una hora invalida no rompe el calculo`() {
+    fun testHoraInvalidaNoRompeElCalculo() {
         assertEquals(0, FechaHoraUtil.enMinutos(""))
         assertEquals(0, FechaHoraUtil.enMinutos("abc"))
     }
 
     @Test
-    fun `una hora sin segundos tambien se interpreta`() {
+    fun testHoraSinSegundosTambienSeInterpreta() {
         assertEquals(390, FechaHoraUtil.enMinutos("06:30"))
     }
 
@@ -42,20 +46,20 @@ class FechaHoraUtilTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `el ingreso antes de las 6 15 es puntual`() {
+    fun testIngresoAntesDeLas615EsPuntual() {
         assertFalse(FechaHoraUtil.esTardanza("05:55:00", esJornadaTarde = false))
         assertFalse(FechaHoraUtil.esTardanza("06:14:00", esJornadaTarde = false))
     }
 
     @Test
-    fun `el ingreso desde las 6 15 es tardanza`() {
+    fun testIngresoDesdeLas615EsTardanza() {
         assertTrue(FechaHoraUtil.esTardanza("06:15:00", esJornadaTarde = false))
         assertTrue(FechaHoraUtil.esTardanza("06:30:00", esJornadaTarde = false))
     }
 
     /** Caso borde: un segundo antes del limite sigue siendo PUNTUAL. */
     @Test
-    fun `un segundo antes del limite es puntual`() {
+    fun testUnSegundoAntesDelLimiteEsPuntual() {
         assertFalse(FechaHoraUtil.esTardanza("06:14:59", esJornadaTarde = false))
     }
 
@@ -64,14 +68,14 @@ class FechaHoraUtilTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `la jornada tarde usa su propio umbral`() {
+    fun testJornadaTardeUsaSuPropioUmbral() {
         assertFalse(FechaHoraUtil.esTardanza("14:10:00", esJornadaTarde = true))
         assertTrue(FechaHoraUtil.esTardanza("14:15:00", esJornadaTarde = true))
     }
 
     /** Una hora de manana NO debe contar como tardanza en la jornada tarde. */
     @Test
-    fun `el umbral de la manana no aplica a la jornada tarde`() {
+    fun testUmbralDeMananaNoAplicaALaJornadaTarde() {
         assertFalse(FechaHoraUtil.esTardanza("06:30:00", esJornadaTarde = true))
     }
 
@@ -82,7 +86,7 @@ class FechaHoraUtilTest {
      * 06:15. El dia termina en tardanza porque las 23:59 si superan el limite.
      */
     @Test
-    fun `los extremos del dia se evaluan contra el limite`() {
+    fun testExtremosDelDiaSeEvaluanContraElLimite() {
         assertFalse(FechaHoraUtil.esTardanza("00:00:00", esJornadaTarde = false))
         assertTrue(FechaHoraUtil.esTardanza("23:59:00", esJornadaTarde = false))
         assertTrue(FechaHoraUtil.esTardanza("23:59:00", esJornadaTarde = true))
@@ -93,7 +97,7 @@ class FechaHoraUtilTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `el rango del dia es coherente`() {
+    fun testRangoDelDiaEsCoherente() {
         val inicio = FechaHoraUtil.inicioDelDia()
         val fin = FechaHoraUtil.finDelDia()
         assertTrue(fin > inicio)
@@ -101,14 +105,20 @@ class FechaHoraUtilTest {
     }
 
     @Test
-    fun `la hora actual tiene formato HH mm ss`() {
+    fun testHoraActualTieneFormatoHHmmss() {
         val hora = FechaHoraUtil.ahoraHora()
-        assertTrue("Formato inesperado: $hora", Regex("""^\d{2}:\d{2}:\d{2}$""").matches(hora))
+        assertTrue(
+            "Formato inesperado: $hora",
+            Regex("""^\d{2}:\d{2}:\d{2}$""").matches(hora)
+        )
     }
 
     @Test
-    fun `la fecha de hoy tiene formato ISO`() {
+    fun testFechaDeHoyTieneFormatoISO() {
         val fecha = FechaHoraUtil.hoy()
-        assertTrue("Formato inesperado: $fecha", Regex("""^\d{4}-\d{2}-\d{2}$""").matches(fecha))
+        assertTrue(
+            "Formato inesperado: $fecha",
+            Regex("""^\d{4}-\d{2}-\d{2}$""").matches(fecha)
+        )
     }
 }
