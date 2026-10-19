@@ -176,6 +176,26 @@
                     android:textStyle="bold"
                     app:backgroundTint="@color/verde_agricola"
                     app:cornerRadius="16dp" />
+
+                <!-- Botón Calibrar Tara (AGV-015) -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCalibrarTara"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginBottom="14dp"
+                    android:gravity="center_vertical|start"
+                    android:paddingStart="24dp"
+                    android:text="@string/calibrar_tara"
+                    android:textColor="@color/white"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/verde_agricola"
+                    app:cornerRadius="16dp"
+                    app:icon="@drawable/ic_scale"
+                    app:iconGravity="textStart"
+                    app:iconPadding="16dp"
+                    app:iconSize="28dp"
+                    app:iconTint="@color/white" />
             </LinearLayout>
 
         </LinearLayout>

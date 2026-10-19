@@ -2,27 +2,38 @@ package com.agrovalle.cosecha.view
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.agrovalle.cosecha.databinding.ActivityLoginBinding
 import com.agrovalle.cosecha.util.SesionTurno
+import com.agrovalle.cosecha.viewmodel.LoginViewModel
 
 /**
  * Pantalla 01 - Login / Seleccion de Rol (NavGraph Sprint 1).
  * Configura el turno (rol, jornada y fundo) y lo guarda en la sesion compartida
  * [SesionTurno], de modo que todas las pantallas lo conserven.
+ *
+ * Las posiciones de los Spinners viven en el SavedStateHandle de
+ * [LoginViewModel]: la Activity ya no guarda estado en onSaveInstanceState.
  */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
+    private val viewModel: LoginViewModel by viewModels()
+
+    /**
+     * Al restaurar las posiciones, `setSelection` dispara `onItemSelected` y
+     * machacaria el SavedStateHandle antes de terminar de pintar. Mientras este
+     * en `true` se ignoran esos eventos automaticos.
+     */
+    private var ignorarSeleccionInicial = true
 
     companion object {
         const val ROL_CAPATAZ = SesionTurno.ROL_CAPATAZ
         const val ROL_ASISTENTE = SesionTurno.ROL_ASISTENTE
-
-        private const val KEY_POS_ROL = "key_pos_rol"
-        private const val KEY_POS_JORNADA = "key_pos_jornada"
-        private const val KEY_POS_FUNDO = "key_pos_fundo"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,57 +42,73 @@ class LoginActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         configurarSpinners()
-
-        if (savedInstanceState != null) {
-            binding.spnRol.setSelection(savedInstanceState.getInt(KEY_POS_ROL, 0))
-            binding.spnJornada.setSelection(savedInstanceState.getInt(KEY_POS_JORNADA, 0))
-            binding.spnFundo.setSelection(savedInstanceState.getInt(KEY_POS_FUNDO, 0))
-        }
-
         configurarBotonIniciar()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putInt(KEY_POS_ROL, binding.spnRol.selectedItemPosition)
-        outState.putInt(KEY_POS_JORNADA, binding.spnJornada.selectedItemPosition)
-        outState.putInt(KEY_POS_FUNDO, binding.spnFundo.selectedItemPosition)
+        restaurarSeleccion()
     }
 
     private fun configurarSpinners() {
-        val roles = listOf("Capataz de Cuadrilla", "Asistente de Pesaje")
-        binding.spnRol.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, roles)
+        binding.spnRol.adapter = crearAdapter(viewModel.roles)
+        binding.spnJornada.adapter = crearAdapter(viewModel.jornadas)
+        binding.spnFundo.adapter = crearAdapter(viewModel.fundos)
 
-        val jornadas = listOf(SesionTurno.JORNADA_MANANA_TXT, SesionTurno.JORNADA_TARDE_TXT)
-        binding.spnJornada.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, jornadas)
+        binding.spnRol.onItemSelectedListener = selectorPara { posicion ->
+            viewModel.posicionRol = posicion
+        }
+        binding.spnJornada.onItemSelectedListener = selectorPara { posicion ->
+            viewModel.posicionJornada = posicion
+        }
+        binding.spnFundo.onItemSelectedListener = selectorPara { posicion ->
+            viewModel.posicionFundo = posicion
+        }
+    }
 
-        val fundos = listOf("Fundo Principal Virú", "Fundo Chao Norte")
-        binding.spnFundo.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, fundos)
+    private fun crearAdapter(opciones: List<String>): ArrayAdapter<String> =
+        ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, opciones)
+
+    /** Listener que ignora el primer evento automatico del arranque/restauracion. */
+    private fun selectorPara(onCambio: (Int) -> Unit) =
+        object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                if (ignorarSeleccionInicial) return
+                onCambio(position)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
+    /** Pinta en los Spinners las posiciones recuperadas del SavedStateHandle. */
+    private fun restaurarSeleccion() {
+        binding.spnRol.setSelection(viewModel.posicionRol)
+        binding.spnJornada.setSelection(viewModel.posicionJornada)
+        binding.spnFundo.setSelection(viewModel.posicionFundo)
+
+        // A partir de aqui el usuario ya manda: los cambios cuentan.
+        ignorarSeleccionInicial = false
     }
 
     private fun configurarBotonIniciar() {
         binding.btnIniciarTurno.setOnClickListener {
-            val rolNormalizado =
-                if (binding.spnRol.selectedItemPosition == 0) ROL_CAPATAZ else ROL_ASISTENTE
-            val jornadaSeleccionada = binding.spnJornada.selectedItem.toString()
-            val fundoSeleccionado = binding.spnFundo.selectedItem.toString()
-
-            // Estado de turno COMPARTIDO para toda la aplicacion.
-            SesionTurno.iniciar(
-                rol = rolNormalizado,
-                jornada = jornadaSeleccionada,
-                fundo = fundoSeleccionado,
-                operador = if (rolNormalizado == ROL_CAPATAZ) {
-                    "Capataz de cuadrilla"
-                } else {
-                    "Asistente de pesaje"
-                }
-            )
-
+            // Guarda el turno en SesionTurno (estado compartido de la app)
+            // y vuelca las posiciones actuales al SavedStateHandle.
+            sincronizarPosiciones()
+            viewModel.iniciarTurno()
             startActivity(Intent(this, MenuActivity::class.java))
         }
+    }
+
+    /**
+     * Refresca el SavedStateHandle con lo que se ve en pantalla. Garantiza que
+     * el turno iniciado coincida con la seleccion visible aunque el usuario haya
+     * cambiado de Spinner sin disparar el listener.
+     */
+    private fun sincronizarPosiciones() {
+        viewModel.posicionRol = binding.spnRol.selectedItemPosition
+        viewModel.posicionJornada = binding.spnJornada.selectedItemPosition
+        viewModel.posicionFundo = binding.spnFundo.selectedItemPosition
     }
 }

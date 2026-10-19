@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.databinding.ActivityBusquedaDniBinding
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.viewmodel.AsistenciaViewModel
@@ -32,44 +31,25 @@ class BusquedaDNIActivity : AppCompatActivity() {
         const val EXTRA_DNI_JORNALERO = "extra_dni_jornalero"
 
         private const val MAX_DIGITOS = 4
-        private const val KEY_JORNALERO = "key_jornalero_busqueda"
     }
-
-    private var jornaleroEncontrado: Jornalero? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityBusquedaDniBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        if (savedInstanceState != null) {
-            jornaleroEncontrado = buscarJornaleroGuardado(savedInstanceState)
-        }
-
         configurarTeclado()
         configurarEventos()
         observarCoincidencias()
         actualizarDisplay()
 
-        val recuperado = jornaleroEncontrado
+        val recuperado = viewModel.jornaleroEncontrado
         if (recuperado != null) {
             mostrarResultado(recuperado)
         } else if (viewModel.ultimosDigitos.isNotEmpty()) {
             // Tras una rotacion se repite la busqueda con los digitos conservados.
             viewModel.buscarPorUltimosDigitos(viewModel.ultimosDigitos)
         }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putLong(KEY_JORNALERO, jornaleroEncontrado?.id ?: 0L)
-    }
-
-    /** Recupera el jornalero desde el padron en memoria usando su id. */
-    private fun buscarJornaleroGuardado(state: Bundle): Jornalero? {
-        val id = state.getLong(KEY_JORNALERO, 0L)
-        if (id == 0L) return null
-        return DatosMemoria.buscarJornaleroPorId(id)
     }
 
     private fun configurarTeclado() {
@@ -112,7 +92,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
         binding.btnVolverDni.setOnClickListener { finish() }
 
         binding.btnConfirmarAsistencia.setOnClickListener {
-            jornaleroEncontrado?.let { jornalero ->
+            viewModel.jornaleroEncontrado?.let { jornalero ->
                 val resultado = Intent().apply {
                     putExtra(EXTRA_JORNALERO, jornalero)
                     putExtra(EXTRA_NOMBRE_JORNALERO, jornalero.nombreCompleto)
@@ -129,10 +109,10 @@ class BusquedaDNIActivity : AppCompatActivity() {
             if (viewModel.ultimosDigitos.isEmpty()) return@observe
             val primero = lista.firstOrNull()
             if (primero != null) {
-                jornaleroEncontrado = primero
+                viewModel.jornaleroEncontrado = primero
                 mostrarResultado(primero)
             } else {
-                jornaleroEncontrado = null
+                viewModel.jornaleroEncontrado = null
                 mostrarResultadoVacio()
             }
         }
@@ -171,7 +151,7 @@ class BusquedaDNIActivity : AppCompatActivity() {
     }
 
     private fun limpiarResultado() {
-        jornaleroEncontrado = null
+        viewModel.jornaleroEncontrado = null
         binding.cardResultado.visibility = View.GONE
         binding.tvEstadoVacio.visibility = View.VISIBLE
         binding.tvEstadoVacio.text = "Ingrese dígitos y presione Buscar"

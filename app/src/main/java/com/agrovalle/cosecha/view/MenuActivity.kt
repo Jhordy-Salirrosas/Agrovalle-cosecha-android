@@ -57,6 +57,11 @@ class MenuActivity : AppCompatActivity() {
         binding.btnRegistrarPesaje.setOnClickListener {
             startActivity(Intent(this, RegistrarPesajeActivity::class.java))
         }
+        // AGV-015: acceso directo a la calibracion de tara (se habia perdido
+        // en la refactorizacion; antes solo se llegaba por el flujo de pesaje).
+        binding.btnCalibrarTara.setOnClickListener {
+            startActivity(Intent(this, CalibrarTaraActivity::class.java))
+        }
 
         // Cerrar turno -> vuelve a Login limpiando la pila
         binding.btnCerrarTurno.setOnClickListener {
