@@ -1,10 +1,13 @@
 package com.agrovalle.cosecha.data.repository
 
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
+import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
+import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
+import kotlinx.coroutines.flow.Flow
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -14,7 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger
 data class ResultadoRegistroJabas(
     val parihuela: ParihuelaEntity,
     val nuevaParihuela: ParihuelaEntity? = null,
-    val selladaPorLimite: Boolean = false
+    val selladaPorLimite: Boolean = false,
+    val rechazadoPorMezcla: Boolean = false,
+    val incidenciaGenerada: IncidenciaEntity? = null
 )
 
 /**
@@ -22,13 +27,16 @@ data class ResultadoRegistroJabas(
  */
 class ParihuelaRepository(
     private val parihuelaDao: ParihuelaDao,
-    private val bitacoraDao: BitacoraDao
+    private val bitacoraDao: BitacoraDao,
+    private val incidenciaDao: IncidenciaDao
 ) {
 
     companion object {
         const val LIMITE_JABAS = 120
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
+        const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
+        const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
     }
 
     private val secuenciaCodigo = AtomicInteger(0)
@@ -56,13 +64,17 @@ class ParihuelaRepository(
     }
 
     /**
-     * Incrementa el conteo de jabas de una parihuela abierta.
-     * Si alcanza [LIMITE_JABAS] (120), la sella automáticamente, registra en bitácora
+     * Incrementa el conteo de jabas de una parihuela abierta validando que no exista
+     * mezcla de variedad ni de cuartel.
+     * Si hay diferencia, rechaza el registro sin alterar el conteo y guarda una incidencia.
+     * Si coincide y alcanza [LIMITE_JABAS] (120), la sella automáticamente, registra en bitácora
      * y abre la siguiente parihuela con un código distinto.
      */
     suspend fun registrarJabas(
         parihuelaId: Long,
         cantidad: Int = 1,
+        variedad: String,
+        cuartel: String,
         ahora: Date = Date()
     ): ResultadoRegistroJabas {
         require(cantidad > 0) { "La cantidad de jabas debe ser mayor a 0" }
@@ -72,6 +84,32 @@ class ParihuelaRepository(
 
         check(actual.estado == EstadoParihuela.ABIERTA) {
             "La parihuela ${actual.codigo} ya está sellada y no admite cambios de conteo"
+        }
+
+        val tipoMezcla = when {
+            !variedad.equals(actual.variedad, ignoreCase = true) -> TIPO_MEZCLA_VARIEDAD
+            !cuartel.equals(actual.cuartel, ignoreCase = true) -> TIPO_MEZCLA_CUARTEL
+            else -> null
+        }
+
+        if (tipoMezcla != null) {
+            val detalle = if (tipoMezcla == TIPO_MEZCLA_VARIEDAD) {
+                "Variedad entrante '$variedad' difiere de '${actual.variedad}'"
+            } else {
+                "Cuartel entrante '$cuartel' difiere de '${actual.cuartel}'"
+            }
+            val incidencia = IncidenciaEntity(
+                parihuelaId = actual.id,
+                tipo = tipoMezcla,
+                detalle = detalle,
+                fechaHora = ahora
+            )
+            val idIncidencia = incidenciaDao.insert(incidencia)
+            return ResultadoRegistroJabas(
+                parihuela = actual,
+                rechazadoPorMezcla = true,
+                incidenciaGenerada = incidencia.copy(id = idIncidencia)
+            )
         }
 
         val nuevoConteo = actual.conteoJabas + cantidad
@@ -152,6 +190,12 @@ class ParihuelaRepository(
 
         return sellada
     }
+
+    /**
+     * Expone la lista observable de incidencias vinculadas a una parihuela.
+     */
+    fun observarIncidenciasPorParihuela(parihuelaId: Long): Flow<List<IncidenciaEntity>> =
+        incidenciaDao.observeByParihuela(parihuelaId)
 
     private suspend fun generarCodigoUnico(ahora: Date): String {
         var codigo: String
