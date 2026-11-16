@@ -12,6 +12,24 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
+ * Estados derivados del tiempo de espera de una parihuela abierta.
+ */
+enum class EstadoTiempoEspera {
+    EN_ESPERA,
+    POR_VENCER,
+    EXCEDIDA
+}
+
+/**
+ * Tiempo restante y estado de espera calculados desde la hora de inicio en BD.
+ */
+data class EstadoTiempoParihuela(
+    val parihuelaId: Long,
+    val restanteMs: Long,
+    val estado: EstadoTiempoEspera
+)
+
+/**
  * Resultado de registrar jabas en una parihuela.
  */
 data class ResultadoRegistroJabas(
@@ -33,6 +51,8 @@ class ParihuelaRepository(
 
     companion object {
         const val LIMITE_JABAS = 120
+        const val LIMITE_ESPERA_MS = 30L * 60L * 1000L
+        const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
@@ -196,6 +216,39 @@ class ParihuelaRepository(
      */
     fun observarIncidenciasPorParihuela(parihuelaId: Long): Flow<List<IncidenciaEntity>> =
         incidenciaDao.observeByParihuela(parihuelaId)
+
+    /**
+     * Calcula el tiempo restante y el estado de espera a partir de [ParihuelaEntity.horaInicio].
+     */
+    fun calcularTiempoEspera(
+        parihuela: ParihuelaEntity,
+        ahora: Date = Date()
+    ): EstadoTiempoParihuela {
+        val transcurridoMs = (ahora.time - parihuela.horaInicio.time).coerceAtLeast(0L)
+        val restanteSinAcotar = LIMITE_ESPERA_MS - transcurridoMs
+        val estado = when {
+            restanteSinAcotar <= 0L -> EstadoTiempoEspera.EXCEDIDA
+            restanteSinAcotar <= UMBRAL_POR_VENCER_MS -> EstadoTiempoEspera.POR_VENCER
+            else -> EstadoTiempoEspera.EN_ESPERA
+        }
+        return EstadoTiempoParihuela(
+            parihuelaId = parihuela.id,
+            restanteMs = restanteSinAcotar.coerceAtLeast(0L),
+            estado = estado
+        )
+    }
+
+    /**
+     * Obtiene el estado de tiempo de espera leyendo la parihuela directamente desde la BD.
+     */
+    suspend fun obtenerEstadoTiempoParihuela(
+        parihuelaId: Long,
+        ahora: Date = Date()
+    ): EstadoTiempoParihuela? {
+        val parihuela = parihuelaDao.getById(parihuelaId) ?: return null
+        if (parihuela.estado != EstadoParihuela.ABIERTA) return null
+        return calcularTiempoEspera(parihuela, ahora)
+    }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {
         var codigo: String

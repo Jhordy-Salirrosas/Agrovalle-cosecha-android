@@ -164,6 +164,76 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
+    fun `recien abierta el tiempo restante es el limite completo y estado EN_ESPERA`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+
+        val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, inicio)!!
+
+        assertEquals(ParihuelaRepository.LIMITE_ESPERA_MS, estado.restanteMs)
+        assertEquals(EstadoTiempoEspera.EN_ESPERA, estado.estado)
+    }
+
+    @Test
+    fun `a mitad del limite el calculo es exacto y estado EN_ESPERA`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val mitad = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS / 2)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+
+        val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, mitad)!!
+
+        assertEquals(ParihuelaRepository.LIMITE_ESPERA_MS / 2, estado.restanteMs)
+        assertEquals(EstadoTiempoEspera.EN_ESPERA, estado.estado)
+    }
+
+    @Test
+    fun `con exactamente 5 minutos restantes el estado es POR_VENCER`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val cincoMinAntes = Date(
+            inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - ParihuelaRepository.UMBRAL_POR_VENCER_MS
+        )
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+
+        val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, cincoMinAntes)!!
+
+        assertEquals(ParihuelaRepository.UMBRAL_POR_VENCER_MS, estado.restanteMs)
+        assertEquals(EstadoTiempoEspera.POR_VENCER, estado.estado)
+    }
+
+    @Test
+    fun `pasado el limite el estado es EXCEDIDA y restante es cero`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val pasado = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+
+        val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, pasado)!!
+
+        assertEquals(0L, estado.restanteMs)
+        assertEquals(EstadoTiempoEspera.EXCEDIDA, estado.estado)
+    }
+
+    @Test
+    fun `parihuela leida de la base con hora de inicio antigua calcula bien sin depender de memoria`() = runBlocking {
+        val horaAntigua = Date(1_699_998_000_000L)
+        val id = parihuelaDao.insert(
+            ParihuelaEntity(
+                codigo = "PAR-BD-001",
+                estado = EstadoParihuela.ABIERTA,
+                variedad = "Ventura",
+                cuartel = "Cuartel 05",
+                horaInicio = horaAntigua
+            )
+        )
+        val nuevoRepositorio = ParihuelaRepository(parihuelaDao, bitacoraDao, incidenciaDao)
+        val ahora = Date(horaAntigua.time + ParihuelaRepository.LIMITE_ESPERA_MS - 120_000L)
+
+        val estado = nuevoRepositorio.obtenerEstadoTiempoParihuela(id, ahora)!!
+
+        assertEquals(120_000L, estado.restanteMs)
+        assertEquals(EstadoTiempoEspera.POR_VENCER, estado.estado)
+    }
+
+    @Test
     fun `cuartel distinto se rechaza, mantiene conteo y registra incidencia MEZCLA_CUARTEL`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
         repository.registrarJabas(parihuela.id, 5, "Biloxi", "Cuartel 01")
