@@ -234,6 +234,83 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
+    fun `intento de edicion sobre parihuela SELLADA se rechaza y registra INTENTO_EDICION en bitacora`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val sellado = Date(1_700_000_120_000L)
+        val intento = Date(1_700_000_180_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarJabas(parihuela.id, 120, "Biloxi", "Cuartel 01", sellado)
+
+        try {
+            repository.registrarJabas(parihuela.id, 5, "Biloxi", "Cuartel 01", intento)
+            fail("Debió rechazar la edición sobre una parihuela SELLADA")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
+        assertEquals(2, eventos.size)
+        assertEquals(ParihuelaRepository.EVENTO_INTENTO_EDICION, eventos.last().evento)
+        assertEquals(intento, eventos.last().fechaHora)
+    }
+
+    @Test
+    fun `intento de edicion sobre parihuela SELLADA_ANTICIPADA se rechaza y registra INTENTO_EDICION`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", inicio)
+        repository.sellarAnticipadamente(parihuela.id, "Lluvia", Date(1_700_000_060_000L))
+
+        try {
+            repository.sellarAnticipadamente(parihuela.id, "Otro motivo", Date(1_700_000_120_000L))
+            fail("Debió rechazar el re-sellado sobre una parihuela SELLADA_ANTICIPADA")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
+        assertEquals(2, eventos.size)
+        assertEquals(ParihuelaRepository.EVENTO_INTENTO_EDICION, eventos.last().evento)
+    }
+
+    @Test
+    fun `consulta de origen por codigo existente devuelve todos los datos`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val sellado = Date(1_700_000_300_000L)
+        val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 18", inicio)
+        repository.registrarJabas(parihuela.id, 40, "Ventura", "Cuartel 18", Date(1_700_000_100_000L))
+        repository.sellarAnticipadamente(parihuela.id, "Fin de jornada", sellado)
+
+        val resultado = repository.consultarOrigenPorCodigo(parihuela.codigo)
+
+        assertTrue(resultado is ConsultaOrigenParihuela.Encontrado)
+        val origen = (resultado as ConsultaOrigenParihuela.Encontrado).origen
+        assertEquals(parihuela.codigo, origen.codigo)
+        assertEquals("Ventura", origen.variedad)
+        assertEquals("Cuartel 18", origen.cuartel)
+        assertEquals(40, origen.conteoJabas)
+        assertEquals(0, origen.pisos)
+        assertEquals(inicio, origen.horaInicio)
+        assertEquals(sellado, origen.horaSellado)
+        assertEquals(EstadoParihuela.SELLADA_ANTICIPADA, origen.estado)
+        assertEquals("Fin de jornada", origen.motivoSelladoAnticipado)
+    }
+
+    @Test
+    fun `consulta de origen por codigo inexistente devuelve NoEncontrado sin error`() = runBlocking {
+        val resultado = repository.consultarOrigenPorCodigo("PAR-NO-EXISTE")
+
+        assertTrue(resultado is ConsultaOrigenParihuela.NoEncontrado)
+    }
+
+    @Test
+    fun `parihuela abierta acepta cambios sin generar eventos INTENTO_EDICION`() = runBlocking {
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
+        repository.registrarJabas(parihuela.id, 10, "Biloxi", "Cuartel 01")
+
+        assertTrue(bitacoraDao.items.none { it.evento == ParihuelaRepository.EVENTO_INTENTO_EDICION })
+    }
+
+    @Test
     fun `cuartel distinto se rechaza, mantiene conteo y registra incidencia MEZCLA_CUARTEL`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
         repository.registrarJabas(parihuela.id, 5, "Biloxi", "Cuartel 01")

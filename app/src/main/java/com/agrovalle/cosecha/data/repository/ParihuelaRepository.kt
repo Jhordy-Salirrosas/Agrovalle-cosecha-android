@@ -30,6 +30,29 @@ data class EstadoTiempoParihuela(
 )
 
 /**
+ * Datos completos de origen de una parihuela consultada por su código QR.
+ */
+data class OrigenParihuela(
+    val codigo: String,
+    val variedad: String,
+    val cuartel: String,
+    val conteoJabas: Int,
+    val pisos: Int,
+    val horaInicio: Date,
+    val horaSellado: Date?,
+    val estado: EstadoParihuela,
+    val motivoSelladoAnticipado: String?
+)
+
+/**
+ * Resultado de consultar el origen de una parihuela por código.
+ */
+sealed interface ConsultaOrigenParihuela {
+    data class Encontrado(val origen: OrigenParihuela) : ConsultaOrigenParihuela
+    data object NoEncontrado : ConsultaOrigenParihuela
+}
+
+/**
  * Resultado de registrar jabas en una parihuela.
  */
 data class ResultadoRegistroJabas(
@@ -55,6 +78,7 @@ class ParihuelaRepository(
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
+        const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
         const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
     }
@@ -102,8 +126,18 @@ class ParihuelaRepository(
         val actual = parihuelaDao.getById(parihuelaId)
             ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
 
-        check(actual.estado == EstadoParihuela.ABIERTA) {
-            "La parihuela ${actual.codigo} ya está sellada y no admite cambios de conteo"
+        if (actual.estado != EstadoParihuela.ABIERTA) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = actual.id,
+                    evento = EVENTO_INTENTO_EDICION,
+                    detalle = "Intento de registrar $cantidad jabas sobre parihuela en estado ${actual.estado}",
+                    fechaHora = ahora
+                )
+            )
+            throw IllegalStateException(
+                "La parihuela ${actual.codigo} ya está sellada y no admite cambios de conteo"
+            )
         }
 
         val tipoMezcla = when {
@@ -188,8 +222,16 @@ class ParihuelaRepository(
         val actual = parihuelaDao.getById(parihuelaId)
             ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
 
-        check(actual.estado == EstadoParihuela.ABIERTA) {
-            "La parihuela ${actual.codigo} ya está sellada"
+        if (actual.estado != EstadoParihuela.ABIERTA) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = actual.id,
+                    evento = EVENTO_INTENTO_EDICION,
+                    detalle = "Intento de sellado anticipado sobre parihuela en estado ${actual.estado}",
+                    fechaHora = ahora
+                )
+            )
+            throw IllegalStateException("La parihuela ${actual.codigo} ya está sellada")
         }
 
         val sellada = actual.copy(
@@ -248,6 +290,28 @@ class ParihuelaRepository(
         val parihuela = parihuelaDao.getById(parihuelaId) ?: return null
         if (parihuela.estado != EstadoParihuela.ABIERTA) return null
         return calcularTiempoEspera(parihuela, ahora)
+    }
+
+    /**
+     * Consulta el origen completo de una parihuela por su código (QR).
+     * Devuelve [ConsultaOrigenParihuela.NoEncontrado] si el código no existe.
+     */
+    suspend fun consultarOrigenPorCodigo(codigo: String): ConsultaOrigenParihuela {
+        val parihuela = parihuelaDao.getByCodigo(codigo.trim())
+            ?: return ConsultaOrigenParihuela.NoEncontrado
+        return ConsultaOrigenParihuela.Encontrado(
+            OrigenParihuela(
+                codigo = parihuela.codigo,
+                variedad = parihuela.variedad,
+                cuartel = parihuela.cuartel,
+                conteoJabas = parihuela.conteoJabas,
+                pisos = parihuela.pisos,
+                horaInicio = parihuela.horaInicio,
+                horaSellado = parihuela.horaSellado,
+                estado = parihuela.estado,
+                motivoSelladoAnticipado = parihuela.motivoSelladoAnticipado
+            )
+        )
     }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {
