@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("kotlin-kapt")
 }
 
 android {
@@ -50,6 +51,12 @@ android {
     }
 }
 
+kapt {
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     // ------------------------------------------------------------------
     // App
@@ -69,8 +76,11 @@ dependencies {
     // Corrutinas (incluidas por lifecycle-ktx; se declara la version explicita)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // NOTA (Sprint 1): NO se usa Room. La persistencia es en memoria mediante
-    // arreglos/listas (DatosMemoria) y SavedStateHandle, tal como exige el curso.
+    // Room (Sprint 2 - base de persistencia local)
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
 
     // ZXing: lectura real de QR / Code 128 (sin CameraX ni ML Kit)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
