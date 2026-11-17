@@ -476,6 +476,55 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
+    fun `evaluarAlertasTiempo no avisa en EN_ESPERA`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+
+        val porNotificar = repository.evaluarAlertasTiempo(Date(inicio.time + 10 * 60_000L))
+
+        assertTrue(porNotificar.isEmpty())
+        assertTrue(bitacoraDao.items.isEmpty())
+    }
+
+    @Test
+    fun `evaluarAlertasTiempo avisa una sola vez en POR_VENCER y no repite`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        val enPorVencer = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - 3 * 60_000L)
+
+        val primeraVez = repository.evaluarAlertasTiempo(enPorVencer)
+        val segundaVez = repository.evaluarAlertasTiempo(Date(enPorVencer.time + 30_000L))
+
+        assertEquals(listOf(parihuela.id), primeraVez.map { it.id })
+        assertTrue(segundaVez.isEmpty())
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_ALERTA_POR_VENCER
+            }
+        )
+    }
+
+    @Test
+    fun `evaluarAlertasTiempo marca RETENCION_EXCEDIDA una sola vez`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", inicio)
+        val excedida = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
+
+        val primera = repository.evaluarAlertasTiempo(excedida)
+        val segunda = repository.evaluarAlertasTiempo(Date(excedida.time + 60_000L))
+
+        assertTrue(primera.isEmpty())
+        assertTrue(segunda.isEmpty())
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_RETENCION_EXCEDIDA
+            }
+        )
+    }
+
+    @Test
     fun `cuartel distinto se rechaza, mantiene conteo y registra incidencia MEZCLA_CUARTEL`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
         repository.registrarJabas(parihuela.id, 5, "Biloxi", "Cuartel 01")

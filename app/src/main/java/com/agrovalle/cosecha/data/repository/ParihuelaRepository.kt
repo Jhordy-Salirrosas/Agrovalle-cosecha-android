@@ -129,6 +129,8 @@ class ParihuelaRepository(
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
         const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
+        const val EVENTO_ALERTA_POR_VENCER = "ALERTA_POR_VENCER"
+        const val EVENTO_RETENCION_EXCEDIDA = "RETENCION_EXCEDIDA"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
         const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
     }
@@ -508,6 +510,56 @@ class ParihuelaRepository(
         val actualizado = pesaje.copy(jornalero = jornaleroLimpio)
         pesajeDao.update(actualizado)
         return actualizado
+    }
+
+    /**
+     * Evalúa las parihuelas abiertas y decide cuáles deben disparar notificación POR_VENCER
+     * (una sola vez por parihuela) y cuáles deben marcar RETENCION_EXCEDIDA (una sola vez).
+     */
+    suspend fun evaluarAlertasTiempo(ahora: Date = Date()): List<ParihuelaEntity> {
+        val abiertas = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first()
+        val eventosExistentes = bitacoraDao.observeAll().first()
+        val porNotificar = mutableListOf<ParihuelaEntity>()
+
+        for (parihuela in abiertas) {
+            val tiempo = calcularTiempoEspera(parihuela, ahora)
+            when (tiempo.estado) {
+                EstadoTiempoEspera.EN_ESPERA -> Unit
+                EstadoTiempoEspera.POR_VENCER -> {
+                    val yaAvisada = eventosExistentes.any {
+                        it.parihuelaId == parihuela.id && it.evento == EVENTO_ALERTA_POR_VENCER
+                    }
+                    if (!yaAvisada) {
+                        bitacoraDao.insert(
+                            BitacoraEntity(
+                                parihuelaId = parihuela.id,
+                                evento = EVENTO_ALERTA_POR_VENCER,
+                                detalle = "Alerta de tiempo por vencer (${tiempo.restanteMs / 60_000L} min restantes)",
+                                fechaHora = ahora
+                            )
+                        )
+                        porNotificar.add(parihuela)
+                    }
+                }
+
+                EstadoTiempoEspera.EXCEDIDA -> {
+                    val yaMarcada = eventosExistentes.any {
+                        it.parihuelaId == parihuela.id && it.evento == EVENTO_RETENCION_EXCEDIDA
+                    }
+                    if (!yaMarcada) {
+                        bitacoraDao.insert(
+                            BitacoraEntity(
+                                parihuelaId = parihuela.id,
+                                evento = EVENTO_RETENCION_EXCEDIDA,
+                                detalle = "Retención de tiempo excedida para parihuela ${parihuela.codigo}",
+                                fechaHora = ahora
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return porNotificar
     }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {

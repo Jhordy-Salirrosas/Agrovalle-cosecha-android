@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Permiso para el lector real de QR / Code 128 (ZXing) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Permiso de notificaciones en Android 13+ (Sprint 2) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />

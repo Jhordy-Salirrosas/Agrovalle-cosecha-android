@@ -76,6 +76,9 @@ dependencies {
     // Corrutinas (incluidas por lifecycle-ktx; se declara la version explicita)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
+    // WorkManager (Sprint 2 - alertas periódicas de tiempo de espera)
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
     // Room (Sprint 2 - base de persistencia local)
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")

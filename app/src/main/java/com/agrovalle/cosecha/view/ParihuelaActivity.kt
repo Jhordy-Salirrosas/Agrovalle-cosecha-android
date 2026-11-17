@@ -1,9 +1,13 @@
 package com.agrovalle.cosecha.view
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -13,8 +17,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.agrovalle.cosecha.R
 import com.agrovalle.cosecha.databinding.ActivityParihuelaBinding
+import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.viewmodel.ParihuelaUiState
 import com.agrovalle.cosecha.viewmodel.ParihuelaViewModel
+import com.agrovalle.cosecha.worker.TiempoEsperaWorker
 import kotlinx.coroutines.launch
 
 /**
@@ -24,14 +30,32 @@ class ParihuelaActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityParihuelaBinding
     private val viewModel: ParihuelaViewModel by viewModels()
+    private val permisoNotificacionesLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityParihuelaBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        NotificacionTiempoUtil.crearCanal(this)
+        solicitarPermisoNotificacionesSiAplica()
+        TiempoEsperaWorker.programarRevisionPeriodica(this)
+
         configurarEventos()
         observarEstado()
+    }
+
+    private fun solicitarPermisoNotificacionesSiAplica() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val estado = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (estado != PackageManager.PERMISSION_GRANTED) {
+                permisoNotificacionesLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     private fun configurarEventos() {
