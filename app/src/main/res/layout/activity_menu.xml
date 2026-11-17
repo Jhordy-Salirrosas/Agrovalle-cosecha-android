@@ -258,6 +258,23 @@
                 app:backgroundTint="@color/verde_agricola"
                 app:cornerRadius="16dp" />
 
+            <!-- Botón Cierre de Turno: Ingresos Manuales (AGV-016 Escenario 2.0) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCierreIngresosManuales"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="14dp"
+                android:gravity="center_vertical|start"
+                android:paddingStart="24dp"
+                android:text="Cierre de Turno (Ingresos Manuales)"
+                android:textColor="@color/verde_agricola"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/white"
+                app:cornerRadius="16dp"
+                app:strokeColor="@color/verde_agricola"
+                app:strokeWidth="2dp" />
+
         </LinearLayout>
     </ScrollView>
 

@@ -76,6 +76,9 @@ class MenuActivity : AppCompatActivity() {
         binding.btnConsultaOrigen.setOnClickListener {
             startActivity(Intent(this, ConsultaOrigenActivity::class.java))
         }
+        binding.btnCierreIngresosManuales.setOnClickListener {
+            startActivity(Intent(this, CierreTurnoActivity::class.java))
+        }
 
         // Cerrar turno -> vuelve a Login limpiando la pila
         binding.btnCerrarTurno.setOnClickListener {
