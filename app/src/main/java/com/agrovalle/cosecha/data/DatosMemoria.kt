@@ -4,6 +4,9 @@ import com.agrovalle.cosecha.model.Asistencia
 import com.agrovalle.cosecha.model.CalibracionTara
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.model.Pesaje
+import com.agrovalle.cosecha.model.RegistroIngresoManual
+import com.agrovalle.cosecha.model.ResumenCuadrillaCierre
+import com.agrovalle.cosecha.util.CalculadoraCierreTurno
 
 /**
  * Datos en MEMORIA de la aplicacion (Singleton de Kotlin) - Sprint 1.
@@ -82,6 +85,9 @@ object DatosMemoria {
     /** Asistencias registradas en el turno (AGV-001 / AGV-016). */
     val asistencias: MutableList<Asistencia> = mutableListOf()
 
+    /** Bitácora de ingresos manuales por DNI con motivo, hora y capataz (AGV-016 Escenario 2.0). */
+    val bitacoraIngresosManuales: MutableList<RegistroIngresoManual> = mutableListOf()
+
     /** Pesajes registrados (AGV-003 / AGV-004). */
     val pesajes: MutableList<Pesaje> = mutableListOf()
 
@@ -89,6 +95,7 @@ object DatosMemoria {
     val calibraciones: MutableList<CalibracionTara> = mutableListOf()
 
     private var secuenciaAsistencia = 0L
+    private var secuenciaIngresoManual = 0L
     private var secuenciaPesaje = 0L
     private var secuenciaCalibracion = 0L
 
@@ -156,6 +163,50 @@ object DatosMemoria {
             .distinctBy { it.id }
             .toList()
 
+    /** Registra un evento en la bitácora de ingresos manuales (AGV-016 Escenario 2.0). */
+    fun registrarBitacoraIngresoManual(
+        jornalero: Jornalero,
+        fecha: String,
+        hora: String,
+        motivo: String,
+        capatazResponsable: String
+    ): RegistroIngresoManual {
+        val motivoLimpio = motivo.trim()
+        val capatazLimpio = capatazResponsable.trim()
+        require(motivoLimpio.isNotEmpty()) { "El motivo del ingreso manual es obligatorio" }
+        require(capatazLimpio.isNotEmpty()) { "El capataz responsable es obligatorio" }
+        val registro = RegistroIngresoManual(
+            id = ++secuenciaIngresoManual,
+            jornaleroId = jornalero.id,
+            jornaleroNombre = jornalero.nombreCompleto,
+            dni = jornalero.dni,
+            cuadrillaCodigo = jornalero.cuadrillaCodigo,
+            fecha = fecha,
+            hora = hora,
+            motivo = motivoLimpio,
+            capatazResponsable = capatazLimpio
+        )
+        bitacoraIngresosManuales.add(registro)
+        return registro
+    }
+
+    /** Bitácora de ingresos manuales de una fecha (los más recientes primero). */
+    fun obtenerBitacoraIngresosManuales(fecha: String): List<RegistroIngresoManual> =
+        bitacoraIngresosManuales
+            .filter { it.fecha == fecha }
+            .sortedByDescending { it.id }
+
+    /** Resumen de asistencias e ingresos manuales por cuadrilla para el cierre de turno. */
+    fun obtenerResumenCierrePorCuadrilla(fecha: String): List<ResumenCuadrillaCierre> {
+        val asistenciasDia = asistencias.filter { it.fecha == fecha }
+        val cuadrillasPadron = listaJornaleros.map { it.cuadrillaCodigo }.distinct()
+        return CalculadoraCierreTurno.resumirPorCuadrilla(
+            asistenciasDelDia = asistenciasDia,
+            jornaleros = listaJornaleros,
+            cuadrillasBase = cuadrillasPadron
+        )
+    }
+
     // ------------------------------------------------------------------------
     // Asignaciones y pesajes
     // ------------------------------------------------------------------------
@@ -209,9 +260,11 @@ object DatosMemoria {
     fun reiniciarTurno() {
         asignaciones.clear()
         asistencias.clear()
+        bitacoraIngresosManuales.clear()
         pesajes.clear()
         calibraciones.clear()
         secuenciaAsistencia = 0L
+        secuenciaIngresoManual = 0L
         secuenciaPesaje = 0L
         secuenciaCalibracion = 0L
     }

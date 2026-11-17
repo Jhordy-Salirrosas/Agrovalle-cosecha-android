@@ -78,7 +78,9 @@ class AsistenciaQRActivity : AppCompatActivity() {
         if (result.resultCode == Activity.RESULT_OK) {
             val jornalero =
                 result.data?.getSerializableExtra(BusquedaDNIActivity.EXTRA_JORNALERO) as? Jornalero
-            if (jornalero != null) viewModel.registrarManual(jornalero)
+            val motivo =
+                result.data?.getStringExtra(BusquedaDNIActivity.EXTRA_MOTIVO_MANUAL).orEmpty()
+            if (jornalero != null) viewModel.registrarManual(jornalero, motivo)
         }
     }
 

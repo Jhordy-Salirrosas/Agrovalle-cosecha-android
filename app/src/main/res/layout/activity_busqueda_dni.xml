@@ -80,72 +80,100 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Tarjeta de Resultado de Búsqueda -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/cardResultado"
+    <!-- Área central desplazable para resultado / motivo / estado vacío -->
+    <ScrollView
+        android:id="@+id/scrollResultadoDni"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:visibility="gone"
-        app:cardBackgroundColor="@color/surface"
-        app:cardCornerRadius="14dp"
-        app:cardElevation="2dp"
-        app:strokeColor="@color/verde_agricola"
-        app:strokeWidth="1.5dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="8dp"
+        app:layout_constraintBottom_toTopOf="@id/gridTeclado"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/cardDisplayDni"
-        tools:visibility="visible">
+        app:layout_constraintTop_toBottomOf="@id/cardDisplayDni">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="14dp">
+            android:orientation="vertical">
+
+            <!-- Tarjeta de Resultado de Búsqueda -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardResultado"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/verde_agricola"
+                app:strokeWidth="1.5dp"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/tvNombreJornalero"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Juan Pérez Sánchez"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvDniCompleto"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="DNI: 12345678 • Cuadrilla CUA-01"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Motivo de ingreso manual"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/spnMotivoManual"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:minHeight="44dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnConfirmarAsistencia"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/confirmar_asistencia"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/verde_agricola"
+                        app:cornerRadius="10dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <TextView
-                android:id="@+id/tvNombreJornalero"
-                android:layout_width="wrap_content"
+                android:id="@+id/tvEstadoVacio"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Juan Pérez Sánchez"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tvDniCompleto"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="DNI: 12345678 • Cuadrilla CUA-01"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="Ingrese dígitos y presione Buscar"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnConfirmarAsistencia"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="10dp"
-                android:text="@string/confirmar_asistencia"
-                android:textColor="@color/white"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                app:backgroundTint="@color/verde_agricola"
-                app:cornerRadius="10dp" />
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <TextView
-        android:id="@+id/tvEstadoVacio"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="Ingrese dígitos y presione Buscar"
-        android:textColor="@color/text_secondary"
-        android:textSize="13sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/cardDisplayDni" />
+    </ScrollView>
 
     <!-- Teclado Numérico de Botones Grandes -->
     <GridLayout

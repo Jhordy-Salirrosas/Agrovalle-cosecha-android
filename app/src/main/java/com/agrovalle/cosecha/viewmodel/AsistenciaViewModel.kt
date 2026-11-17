@@ -75,14 +75,20 @@ class AsistenciaViewModel(
             savedStateHandle[KEY_METODO] = value
         }
 
-    /**
-     * ID del jornalero cuya asistencia se acaba de registrar. Es el valor que la
+    /** ID del jornalero cuya asistencia se acaba de registrar. Es el valor que la
      * Activity envia a ContextoAgronomicoActivity por el Intent.
      */
     var jornaleroRegistradoId: Long
         get() = savedStateHandle[KEY_JORNALERO_ID] ?: 0L
         set(value) {
             savedStateHandle[KEY_JORNALERO_ID] = value
+        }
+
+    /** Motivo seleccionado para el ingreso manual por DNI (AGV-016 Escenario 2.0). */
+    var motivoManual: String
+        get() = savedStateHandle[KEY_MOTIVO_MANUAL] ?: ""
+        set(value) {
+            savedStateHandle[KEY_MOTIVO_MANUAL] = value
         }
 
     private fun fechaTurno(): String =
@@ -107,12 +113,33 @@ class AsistenciaViewModel(
     }
 
     /** AGV-016: ingreso manual confirmado desde la pantalla de búsqueda por DNI. */
-    fun registrarManual(jornalero: Jornalero) {
+    fun registrarManual(jornalero: Jornalero, motivo: String = motivoManual) {
+        val motivoLimpio = motivo.trim()
+        if (motivoLimpio.isEmpty() || motivoLimpio == MOTIVO_MANUAL_PROMPT) {
+            _resultado.value = ResultadoAsistencia(
+                exitoso = false,
+                mensaje = "Seleccione el motivo del ingreso manual antes de confirmar."
+            )
+            return
+        }
         ultimosDigitos = jornalero.dni.takeLast(4)
-        registrar(jornalero, METODO_DNI)
+        val capataz = SesionTurno.operador.value?.takeIf { it.isNotBlank() }
+            ?: SesionTurno.rol.value
+            ?: SesionTurno.ROL_CAPATAZ
+        registrar(
+            jornalero = jornalero,
+            metodo = METODO_DNI,
+            motivoManual = motivoLimpio,
+            capatazResponsable = capataz
+        )
     }
 
-    private fun registrar(jornalero: Jornalero, metodo: String) {
+    private fun registrar(
+        jornalero: Jornalero,
+        metodo: String,
+        motivoManual: String? = null,
+        capatazResponsable: String? = null
+    ) {
         val fecha = fechaTurno()
 
         val existente = DatosMemoria.buscarAsistencia(jornalero.id, fecha)
@@ -147,6 +174,16 @@ class AsistenciaViewModel(
             return
         }
 
+        if (metodo == METODO_DNI && !motivoManual.isNullOrBlank()) {
+            DatosMemoria.registrarBitacoraIngresoManual(
+                jornalero = jornalero,
+                fecha = fecha,
+                hora = hora,
+                motivo = motivoManual,
+                capatazResponsable = capatazResponsable ?: SesionTurno.ROL_CAPATAZ
+            )
+        }
+
         jornaleroRegistradoId = jornalero.id
         ultimoMetodo = metodo
         _contador.value = DatosMemoria.contarAsistencias(fecha)
@@ -179,6 +216,7 @@ class AsistenciaViewModel(
         ultimoCodigoEscaneado = null
         jornaleroRegistradoId = 0L
         jornaleroEncontrado = null
+        motivoManual = ""
         _coincidencias.value = emptyList()
     }
 
@@ -187,11 +225,19 @@ class AsistenciaViewModel(
         const val ESTADO_TARDANZA = "TARDANZA"
         const val METODO_QR = "QR_SCAN"
         const val METODO_DNI = "DNI_MANUAL"
+        const val MOTIVO_MANUAL_PROMPT = "Seleccione motivo..."
+        val MOTIVOS_INGRESO_MANUAL = listOf(
+            "Fotocheck olvidado o extraviado",
+            "Código QR dañado o ilegible",
+            "Falla de cámara en campo",
+            "Otro motivo operativo"
+        )
 
         private const val KEY_ULTIMO_CODIGO = "key_ultimo_codigo_qr"
         private const val KEY_DIGITOS = "key_ultimos_digitos"
         private const val KEY_METODO = "key_ultimo_metodo"
         private const val KEY_JORNALERO_ID = "key_jornalero_registrado_id"
         private const val KEY_JORNALERO_ENCONTRADO = "key_jornalero_encontrado"
+        private const val KEY_MOTIVO_MANUAL = "key_motivo_manual"
     }
 }
