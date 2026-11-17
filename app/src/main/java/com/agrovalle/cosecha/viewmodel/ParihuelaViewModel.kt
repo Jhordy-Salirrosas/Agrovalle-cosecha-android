@@ -99,13 +99,20 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun abrirNuevaParihuela(variedad: String, cuartel: String) {
+    fun abrirNuevaParihuela(
+        variedad: String,
+        cuartel: String,
+        clp: String,
+        cuadrilla: String
+    ) {
         val v = variedad.trim()
         val c = cuartel.trim()
-        if (v.isEmpty() || c.isEmpty()) {
+        val clpLimpio = clp.trim()
+        val cuadrillaLimpia = cuadrilla.trim()
+        if (v.isEmpty() || c.isEmpty() || clpLimpio.isEmpty() || cuadrillaLimpia.isEmpty()) {
             _uiState.update {
                 it.copy(
-                    mensaje = "Debe ingresar variedad y cuartel para abrir la parihuela.",
+                    mensaje = "Debe ingresar variedad, cuartel, CLP y cuadrilla para abrir la parihuela.",
                     esError = true
                 )
             }
@@ -113,10 +120,10 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             try {
-                val nueva = repository.abrirNuevaParihuela(v, c)
+                val nueva = repository.abrirNuevaParihuela(v, c, clpLimpio, cuadrillaLimpia)
                 _uiState.update {
                     it.copy(
-                        mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",
+                        mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel} • CLP ${nueva.clp} • Cuadrilla ${nueva.cuadrilla})",
                         esError = false
                     )
                 }

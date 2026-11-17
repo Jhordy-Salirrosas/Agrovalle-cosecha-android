@@ -169,7 +169,9 @@ class ParihuelaActivity : AppCompatActivity() {
             } else {
                 "Parihuela: ${abierta.codigo}"
             }
-            binding.tvDetalleParihuela.text = "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}"
+            binding.tvDetalleParihuela.text =
+                "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}\n" +
+                    "CLP: ${abierta.clp.ifBlank { "-" }} • Cuadrilla: ${abierta.cuadrilla.ifBlank { "-" }}"
             val jabas = avance?.jabasActuales ?: abierta.conteoJabas
             val f100 = avance?.faltanPara100 ?: (100 - jabas).coerceAtLeast(0)
             val f120 = avance?.faltanPara120 ?: (120 - jabas).coerceAtLeast(0)
@@ -247,8 +249,12 @@ class ParihuelaActivity : AppCompatActivity() {
         }
         val etVariedad = EditText(this).apply { hint = "Variedad (obligatorio)" }
         val etCuartel = EditText(this).apply { hint = "Cuartel (obligatorio)" }
+        val etClp = EditText(this).apply { hint = "CLP (obligatorio)" }
+        val etCuadrilla = EditText(this).apply { hint = "Cuadrilla (obligatorio)" }
         layout.addView(etVariedad)
         layout.addView(etCuartel)
+        layout.addView(etClp)
+        layout.addView(etCuadrilla)
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("Abrir nueva parihuela")
@@ -261,12 +267,16 @@ class ParihuelaActivity : AppCompatActivity() {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val v = etVariedad.text?.toString()?.trim().orEmpty()
                 val c = etCuartel.text?.toString()?.trim().orEmpty()
-                if (v.isEmpty() || c.isEmpty()) {
+                val clp = etClp.text?.toString()?.trim().orEmpty()
+                val cuadrilla = etCuadrilla.text?.toString()?.trim().orEmpty()
+                if (v.isEmpty() || c.isEmpty() || clp.isEmpty() || cuadrilla.isEmpty()) {
                     if (v.isEmpty()) etVariedad.error = "La variedad es obligatoria"
                     if (c.isEmpty()) etCuartel.error = "El cuartel es obligatorio"
-                    viewModel.abrirNuevaParihuela(v, c)
+                    if (clp.isEmpty()) etClp.error = "El CLP es obligatorio"
+                    if (cuadrilla.isEmpty()) etCuadrilla.error = "La cuadrilla es obligatoria"
+                    viewModel.abrirNuevaParihuela(v, c, clp, cuadrilla)
                 } else {
-                    viewModel.abrirNuevaParihuela(v, c)
+                    viewModel.abrirNuevaParihuela(v, c, clp, cuadrilla)
                     dialog.dismiss()
                 }
             }

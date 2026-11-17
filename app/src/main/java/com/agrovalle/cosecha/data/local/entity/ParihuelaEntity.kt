@@ -20,6 +20,8 @@ data class ParihuelaEntity(
     val estado: EstadoParihuela = EstadoParihuela.ABIERTA,
     val variedad: String,
     val cuartel: String,
+    val clp: String = "",
+    val cuadrilla: String = "",
     @ColumnInfo(name = "conteo_jabas")
     val conteoJabas: Int = 0,
     val pisos: Int = 0,

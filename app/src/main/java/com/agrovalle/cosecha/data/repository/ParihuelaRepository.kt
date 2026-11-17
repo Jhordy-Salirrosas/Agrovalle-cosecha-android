@@ -13,6 +13,7 @@ import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
+import com.agrovalle.cosecha.util.QrUtil
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -134,6 +135,8 @@ data class OrigenParihuela(
     val codigo: String,
     val variedad: String,
     val cuartel: String,
+    val clp: String,
+    val cuadrilla: String,
     val conteoJabas: Int,
     val pisos: Int,
     val horaInicio: Date?,
@@ -312,25 +315,37 @@ class ParihuelaRepository(
 
     /**
      * Abre una nueva parihuela generando un código único.
+     * Exige variedad, cuartel, CLP y cuadrilla obligatorios (sin valores por defecto).
      * Garantiza que solo exista una parihuela ABIERTA a la vez.
      */
     suspend fun abrirNuevaParihuela(
         variedad: String,
         cuartel: String,
+        clp: String,
+        cuadrilla: String,
         ahora: Date = Date()
     ): ParihuelaEntity = enTransaccionAtomica {
-        abrirNuevaParihuelaInterno(variedad, cuartel, ahora)
+        abrirNuevaParihuelaInterno(variedad, cuartel, clp, cuadrilla, ahora)
     }
 
     private suspend fun abrirNuevaParihuelaInterno(
         variedad: String,
         cuartel: String,
+        clp: String,
+        cuadrilla: String,
         ahora: Date
     ): ParihuelaEntity {
         val variedadLimpia = variedad.trim()
         val cuartelLimpio = cuartel.trim()
-        require(variedadLimpia.isNotEmpty() && cuartelLimpio.isNotEmpty()) {
-            "La variedad y el cuartel son obligatorios para abrir una parihuela"
+        val clpLimpio = clp.trim()
+        val cuadrillaLimpia = cuadrilla.trim()
+        require(
+            variedadLimpia.isNotEmpty() &&
+                cuartelLimpio.isNotEmpty() &&
+                clpLimpio.isNotEmpty() &&
+                cuadrillaLimpia.isNotEmpty()
+        ) {
+            "La variedad, el cuartel, el CLP y la cuadrilla son obligatorios para abrir una parihuela"
         }
 
         val abiertaExistente = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
@@ -345,6 +360,8 @@ class ParihuelaRepository(
             estado = EstadoParihuela.ABIERTA,
             variedad = variedadLimpia,
             cuartel = cuartelLimpio,
+            clp = clpLimpio,
+            cuadrilla = cuadrillaLimpia,
             conteoJabas = 0,
             pisos = 0,
             horaInicio = null
@@ -487,6 +504,8 @@ class ParihuelaRepository(
             val siguiente = abrirNuevaParihuelaInterno(
                 variedad = actual.variedad,
                 cuartel = actual.cuartel,
+                clp = actual.clp,
+                cuadrilla = actual.cuadrilla,
                 ahora = ahora
             )
 
@@ -717,17 +736,21 @@ class ParihuelaRepository(
     }
 
     /**
-     * Consulta el origen completo de una parihuela por su código (QR).
+     * Consulta el origen completo de una parihuela por su código o trama QR.
      * Devuelve [ConsultaOrigenParihuela.NoEncontrado] si el código no existe.
      */
-    suspend fun consultarOrigenPorCodigo(codigo: String): ConsultaOrigenParihuela {
-        val parihuela = parihuelaDao.getByCodigo(codigo.trim())
+    suspend fun consultarOrigenPorCodigo(codigoOTrama: String): ConsultaOrigenParihuela {
+        val codigo = QrUtil.extraerCodigo(codigoOTrama)
+        if (codigo.isEmpty()) return ConsultaOrigenParihuela.NoEncontrado
+        val parihuela = parihuelaDao.getByCodigo(codigo)
             ?: return ConsultaOrigenParihuela.NoEncontrado
         return ConsultaOrigenParihuela.Encontrado(
             OrigenParihuela(
                 codigo = parihuela.codigo,
                 variedad = parihuela.variedad,
                 cuartel = parihuela.cuartel,
+                clp = parihuela.clp,
+                cuadrilla = parihuela.cuadrilla,
                 conteoJabas = parihuela.conteoJabas,
                 pisos = parihuela.pisos,
                 horaInicio = parihuela.horaInicio,
