@@ -1,21 +1,89 @@
 package com.agrovalle.cosecha.data.repository
 
+import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
 import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
 import com.agrovalle.cosecha.data.local.dao.PesajeDao
+import com.agrovalle.cosecha.data.local.dao.ReasignacionDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
+import com.agrovalle.cosecha.data.local.entity.EstadoIncidencia
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
+import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Almacén del cuartel actual asignado a cada jornalero.
+ */
+interface CuartelJornaleroStore {
+    fun obtenerAsignacionesPorNombre(): Map<String, String>
+    fun obtenerCuartel(jornalero: String): String?
+    fun actualizarCuartel(jornalero: String, cuartelDestino: String): String?
+    fun restaurarCuartel(jornalero: String, cuartelAnterior: String?)
+}
+
+/**
+ * Implementación por defecto respaldada por [DatosMemoria].
+ */
+object DatosMemoriaCuartelStore : CuartelJornaleroStore {
+    private fun buscarJornalero(nombre: String) =
+        DatosMemoria.listaJornaleros.firstOrNull {
+            it.nombreCompleto.equals(nombre.trim(), ignoreCase = true)
+        }
+
+    override fun obtenerAsignacionesPorNombre(): Map<String, String> {
+        return DatosMemoria.asignaciones.mapNotNull { (id, cuartel) ->
+            DatosMemoria.buscarJornaleroPorId(id)?.let { it.nombreCompleto to cuartel }
+        }.toMap()
+    }
+
+    override fun obtenerCuartel(jornalero: String): String? {
+        val j = buscarJornalero(jornalero) ?: return null
+        return DatosMemoria.obtenerCuartelAsignado(j.id)
+    }
+
+    override fun actualizarCuartel(jornalero: String, cuartelDestino: String): String? {
+        val j = buscarJornalero(jornalero) ?: return null
+        val anterior = DatosMemoria.obtenerCuartelAsignado(j.id)
+        DatosMemoria.asignarCuartel(j.id, cuartelDestino)
+        return anterior
+    }
+
+    override fun restaurarCuartel(jornalero: String, cuartelAnterior: String?) {
+        val j = buscarJornalero(jornalero) ?: return
+        if (cuartelAnterior == null) {
+            DatosMemoria.asignaciones.remove(j.id)
+        } else {
+            DatosMemoria.asignarCuartel(j.id, cuartelAnterior)
+        }
+    }
+}
+
+private object NoOpReasignacionDao : ReasignacionDao {
+    override suspend fun insert(reasignacion: ReasignacionEntity): Long = 0L
+    override fun observeAll(): Flow<List<ReasignacionEntity>> = flowOf(emptyList())
+    override suspend fun getUltimaPorJornalero(jornalero: String): ReasignacionEntity? = null
+}
+
+/**
+ * Representa un jornalero activo con su cuartel actual y jabas acumuladas para el panel.
+ */
+data class JornaleroCuartelResumen(
+    val nombre: String,
+    val cuartelActual: String,
+    val jabasAcumuladas: Int = 0
+)
 
 /**
  * Ejecutor de bloques transaccionales (Room withTransaction en producción).
@@ -39,7 +107,8 @@ enum class EstadoTiempoEspera {
 data class EstadoTiempoParihuela(
     val parihuelaId: Long,
     val restanteMs: Long,
-    val estado: EstadoTiempoEspera
+    val estado: EstadoTiempoEspera,
+    val cronometroIniciado: Boolean = true
 )
 
 /**
@@ -51,7 +120,7 @@ data class OrigenParihuela(
     val cuartel: String,
     val conteoJabas: Int,
     val pisos: Int,
-    val horaInicio: Date,
+    val horaInicio: Date?,
     val horaSellado: Date?,
     val estado: EstadoParihuela,
     val motivoSelladoAnticipado: String?
@@ -78,12 +147,16 @@ data class ParihuelaAbiertaResumen(
  */
 data class ResumenPanelCapataz(
     val totalAbiertas: Int = 0,
+    val totalRetenidasCalidad: Int = 0,
     val totalSelladas: Int = 0,
     val totalSelladasAnticipadas: Int = 0,
     val totalJabas: Int = 0,
     val jabasPorVariedad: Map<String, Int> = emptyMap(),
     val jabasPorCuartel: Map<String, Int> = emptyMap(),
-    val abiertasPorUrgencia: List<ParihuelaAbiertaResumen> = emptyList()
+    val abiertasPorUrgencia: List<ParihuelaAbiertaResumen> = emptyList(),
+    val retenidasCalidad: List<ParihuelaEntity> = emptyList(),
+    val jornalerosActivos: List<JornaleroCuartelResumen> = emptyList(),
+    val jornalerosPorCuartel: Map<String, List<JornaleroCuartelResumen>> = emptyMap()
 )
 
 /**
@@ -123,7 +196,8 @@ data class ResultadoRegistroJabas(
     val selladaPorLimite: Boolean = false,
     val rechazadoPorMezcla: Boolean = false,
     val rechazadoPorCapacidad: Boolean = false,
-    val incidenciaGenerada: IncidenciaEntity? = null
+    val incidenciaGenerada: IncidenciaEntity? = null,
+    val cronometroIniciadoEnEstePesaje: Boolean = false
 )
 
 /**
@@ -136,7 +210,9 @@ class ParihuelaRepository(
     private val pesajeDao: PesajeDao,
     private val transaccionRunner: TransaccionRunner = object : TransaccionRunner {
         override suspend fun <T> ejecutar(bloque: suspend () -> T): T = bloque()
-    }
+    },
+    private val reasignacionDao: ReasignacionDao = NoOpReasignacionDao,
+    private val cuartelJornaleroStore: CuartelJornaleroStore = DatosMemoriaCuartelStore
 ) {
 
     companion object {
@@ -144,15 +220,37 @@ class ParihuelaRepository(
         private val secuenciaCodigo = AtomicInteger(0)
 
         const val LIMITE_JABAS = 120
-        const val LIMITE_ESPERA_MS = 30L * 60L * 1000L
+        const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
         const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
         const val EVENTO_ALERTA_POR_VENCER = "ALERTA_POR_VENCER"
         const val EVENTO_RETENCION_EXCEDIDA = "RETENCION_EXCEDIDA"
+        const val EVENTO_RETENIDA_CALIDAD = "RETENIDA_CALIDAD"
+        const val EVENTO_LIBERACION_CALIDAD = "LIBERACION_CALIDAD"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
         const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
+        const val ACCION_REVISAR_LOTE_PARIHUELA = "Revisar el lote o la parihuela"
+        const val ACCION_SEPARAR_JABA = "Separar jaba y reubicar en parihuela correcta"
+        const val ACCION_DESCARTAR_ERROR = "Descartar por error de lectura"
+        const val ACCION_LIBERAR = "Liberar"
+        val ACCIONES_INCIDENCIA = listOf(
+            ACCION_REVISAR_LOTE_PARIHUELA,
+            ACCION_SEPARAR_JABA,
+            ACCION_DESCARTAR_ERROR
+        )
+
+        const val MOTIVO_REASIG_REFUERZO_CARGA = "Refuerzo en cuartel con alta carga"
+        const val MOTIVO_REASIG_COBERTURA_AUSENCIA = "Cobertura por ausencia de jornalero"
+        const val MOTIVO_REASIG_AVANCE_CUARTEL = "Avance completado en cuartel de origen"
+        const val MOTIVO_REASIG_PRIORIDAD_VARIEDAD = "Priorización de variedad para empaque"
+        val MOTIVOS_REASIGNACION = listOf(
+            MOTIVO_REASIG_REFUERZO_CARGA,
+            MOTIVO_REASIG_COBERTURA_AUSENCIA,
+            MOTIVO_REASIG_AVANCE_CUARTEL,
+            MOTIVO_REASIG_PRIORIDAD_VARIEDAD
+        )
 
         /**
          * Calcula la demora en milisegundos hasta el momento exacto en que la parihuela
@@ -195,8 +293,9 @@ class ParihuelaRepository(
         }
 
         val abiertaExistente = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
-        check(abiertaExistente == null) {
-            "Ya existe una parihuela abierta (${abiertaExistente?.codigo})"
+        val retenidaExistente = parihuelaDao.observeByEstado(EstadoParihuela.RETENIDA_CALIDAD).first().firstOrNull()
+        check(abiertaExistente == null && retenidaExistente == null) {
+            "Ya existe una parihuela activa (${(abiertaExistente ?: retenidaExistente)?.codigo})"
         }
 
         val codigo = generarCodigoUnico(ahora)
@@ -207,17 +306,27 @@ class ParihuelaRepository(
             cuartel = cuartelLimpio,
             conteoJabas = 0,
             pisos = 0,
-            horaInicio = ahora
+            horaInicio = null
         )
         val id = parihuelaDao.insert(nueva)
         return nueva.copy(id = id)
     }
 
     /**
-     * Expone la parihuela abierta actual desde el repositorio.
+     * Expone la parihuela activa actual (ABIERTA o RETENIDA_CALIDAD) desde el repositorio.
      */
     fun observarParihuelaAbierta(): Flow<ParihuelaEntity?> =
-        parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).map { it.firstOrNull() }
+        parihuelaDao.observeAll().map { lista ->
+            lista.firstOrNull {
+                it.estado == EstadoParihuela.ABIERTA || it.estado == EstadoParihuela.RETENIDA_CALIDAD
+            }
+        }
+
+    /**
+     * Expone las parihuelas actualmente retenidas por calidad.
+     */
+    fun observarParihuelasRetenidas(): Flow<List<ParihuelaEntity>> =
+        parihuelaDao.observeByEstado(EstadoParihuela.RETENIDA_CALIDAD)
 
     /**
      * Incrementa el conteo de jabas de una parihuela abierta validando que no exista
@@ -247,6 +356,12 @@ class ParihuelaRepository(
 
         val actual = parihuelaDao.getById(parihuelaId)
             ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
+
+        if (actual.estado == EstadoParihuela.RETENIDA_CALIDAD) {
+            throw IllegalStateException(
+                "La parihuela ${actual.codigo} está retenida por calidad y no admite pesajes hasta liberarla"
+            )
+        }
 
         if (actual.estado != EstadoParihuela.ABIERTA) {
             bitacoraDao.insert(
@@ -301,15 +416,23 @@ class ParihuelaRepository(
             )
         }
 
+        val esPrimerPesaje = actual.horaInicio == null
+        val horaInicioEfectiva = actual.horaInicio ?: ahora
+        val actualConInicio = if (esPrimerPesaje) {
+            actual.copy(horaInicio = horaInicioEfectiva)
+        } else {
+            actual
+        }
+
         if (nuevoConteo == LIMITE_JABAS) {
-            val sellada = actual.copy(
+            val sellada = actualConInicio.copy(
                 conteoJabas = nuevoConteo,
                 estado = EstadoParihuela.SELLADA,
                 horaSellado = ahora
             )
             parihuelaDao.update(sellada)
 
-            registrarRetencionExcedidaSiCorresponde(actual, ahora)
+            registrarRetencionExcedidaSiCorresponde(actualConInicio, ahora)
 
             bitacoraDao.insert(
                 BitacoraEntity(
@@ -329,16 +452,18 @@ class ParihuelaRepository(
             return ResultadoRegistroJabas(
                 parihuela = sellada,
                 nuevaParihuela = siguiente,
-                selladaPorLimite = true
+                selladaPorLimite = true,
+                cronometroIniciadoEnEstePesaje = esPrimerPesaje
             )
         }
 
-        val actualizada = actual.copy(conteoJabas = nuevoConteo)
+        val actualizada = actualConInicio.copy(conteoJabas = nuevoConteo)
         parihuelaDao.update(actualizada)
         return ResultadoRegistroJabas(
             parihuela = actualizada,
             nuevaParihuela = null,
-            selladaPorLimite = false
+            selladaPorLimite = false,
+            cronometroIniciadoEnEstePesaje = esPrimerPesaje
         )
     }
 
@@ -357,6 +482,12 @@ class ParihuelaRepository(
 
         val actual = parihuelaDao.getById(parihuelaId)
             ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
+
+        if (actual.estado == EstadoParihuela.RETENIDA_CALIDAD) {
+            throw IllegalStateException(
+                "La parihuela ${actual.codigo} está retenida por calidad y no se puede sellar hasta liberarla"
+            )
+        }
 
         if (actual.estado != EstadoParihuela.ABIERTA) {
             bitacoraDao.insert(
@@ -423,13 +554,101 @@ class ParihuelaRepository(
         incidenciaDao.observeAll()
 
     /**
+     * Resuelve una incidencia PENDIENTE con una acción de un toque, hora y responsable.
+     * Si la acción es [ACCION_REVISAR_LOTE_PARIHUELA], pasa la parihuela a [EstadoParihuela.RETENIDA_CALIDAD].
+     */
+    suspend fun resolverIncidencia(
+        incidenciaId: Long,
+        accion: String,
+        responsable: String,
+        ahora: Date = Date()
+    ): IncidenciaEntity = enTransaccionAtomica {
+        val accionLimpia = accion.trim()
+        val responsableLimpio = responsable.trim()
+        require(accionLimpia.isNotEmpty()) { "La acción es obligatoria" }
+        require(responsableLimpio.isNotEmpty()) { "La responsable es obligatoria" }
+
+        val actual = incidenciaDao.getById(incidenciaId)
+            ?: throw IllegalArgumentException("Incidencia no encontrada: $incidenciaId")
+        check(actual.estado == EstadoIncidencia.PENDIENTE) {
+            "La incidencia #$incidenciaId ya fue revisada"
+        }
+
+        val revisada = actual.copy(
+            estado = EstadoIncidencia.REVISADA,
+            accionTomada = accionLimpia,
+            horaRevision = ahora,
+            responsable = responsableLimpio
+        )
+        incidenciaDao.update(revisada)
+
+        if (accionLimpia.equals(ACCION_REVISAR_LOTE_PARIHUELA, ignoreCase = true)) {
+            val parihuela = parihuelaDao.getById(actual.parihuelaId)
+            if (parihuela != null && parihuela.estado == EstadoParihuela.ABIERTA) {
+                parihuelaDao.update(parihuela.copy(estado = EstadoParihuela.RETENIDA_CALIDAD))
+                bitacoraDao.insert(
+                    BitacoraEntity(
+                        parihuelaId = parihuela.id,
+                        evento = EVENTO_RETENIDA_CALIDAD,
+                        detalle = "Retenida por calidad ($accionLimpia) por $responsableLimpio",
+                        fechaHora = ahora
+                    )
+                )
+            }
+        }
+
+        return@enTransaccionAtomica revisada
+    }
+
+    /**
+     * Libera una parihuela que se encuentra en [EstadoParihuela.RETENIDA_CALIDAD],
+     * devolviéndola a [EstadoParihuela.ABIERTA] y registrando la acción [ACCION_LIBERAR] en bitácora.
+     */
+    suspend fun liberarParihuelaRetenida(
+        parihuelaId: Long,
+        responsable: String,
+        ahora: Date = Date()
+    ): ParihuelaEntity = enTransaccionAtomica {
+        val responsableLimpio = responsable.trim()
+        require(responsableLimpio.isNotEmpty()) { "La responsable es obligatoria" }
+
+        val parihuela = parihuelaDao.getById(parihuelaId)
+            ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
+        check(parihuela.estado == EstadoParihuela.RETENIDA_CALIDAD) {
+            "La parihuela ${parihuela.codigo} no está retenida por calidad"
+        }
+
+        val liberada = parihuela.copy(estado = EstadoParihuela.ABIERTA)
+        parihuelaDao.update(liberada)
+
+        bitacoraDao.insert(
+            BitacoraEntity(
+                parihuelaId = parihuela.id,
+                evento = EVENTO_LIBERACION_CALIDAD,
+                detalle = "Acción: $ACCION_LIBERAR por $responsableLimpio",
+                fechaHora = ahora
+            )
+        )
+
+        return@enTransaccionAtomica liberada
+    }
+
+    /**
      * Calcula el tiempo restante y el estado de espera a partir de [ParihuelaEntity.horaInicio].
+     * Si aún no tiene pesajes ([ParihuelaEntity.horaInicio] == null), el cronómetro no corre.
      */
     fun calcularTiempoEspera(
         parihuela: ParihuelaEntity,
         ahora: Date = Date()
     ): EstadoTiempoParihuela {
-        val transcurridoMs = (ahora.time - parihuela.horaInicio.time).coerceAtLeast(0L)
+        val inicio = parihuela.horaInicio
+            ?: return EstadoTiempoParihuela(
+                parihuelaId = parihuela.id,
+                restanteMs = LIMITE_ESPERA_MS,
+                estado = EstadoTiempoEspera.EN_ESPERA,
+                cronometroIniciado = false
+            )
+        val transcurridoMs = (ahora.time - inicio.time).coerceAtLeast(0L)
         val restanteSinAcotar = LIMITE_ESPERA_MS - transcurridoMs
         val estado = when {
             restanteSinAcotar <= 0L -> EstadoTiempoEspera.EXCEDIDA
@@ -439,7 +658,8 @@ class ParihuelaRepository(
         return EstadoTiempoParihuela(
             parihuelaId = parihuela.id,
             restanteMs = restanteSinAcotar.coerceAtLeast(0L),
-            estado = estado
+            estado = estado,
+            cronometroIniciado = true
         )
     }
 
@@ -483,7 +703,11 @@ class ParihuelaRepository(
     fun observarResumenPanel(
         ahoraProvider: () -> Date = { Date() }
     ): Flow<ResumenPanelCapataz> {
-        return parihuelaDao.observeAll().map { parihuelas ->
+        return combine(
+            parihuelaDao.observeAll(),
+            pesajeDao.observeAll(),
+            reasignacionDao.observeAll()
+        ) { parihuelas, pesajes, reasignaciones ->
             val ahora = ahoraProvider()
             val abiertas = parihuelas
                 .filter { it.estado == EstadoParihuela.ABIERTA }
@@ -495,8 +719,12 @@ class ParihuelaRepository(
                 }
                 .sortedBy { it.tiempoEspera.restanteMs }
 
+            val retenidas = parihuelas.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
+            val jornalerosActivos = construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones)
+
             ResumenPanelCapataz(
                 totalAbiertas = abiertas.size,
+                totalRetenidasCalidad = retenidas.size,
                 totalSelladas = parihuelas.count { it.estado == EstadoParihuela.SELLADA },
                 totalSelladasAnticipadas = parihuelas.count {
                     it.estado == EstadoParihuela.SELLADA_ANTICIPADA
@@ -508,9 +736,147 @@ class ParihuelaRepository(
                 jabasPorCuartel = parihuelas
                     .groupBy { it.cuartel }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
-                abiertasPorUrgencia = abiertas
+                abiertasPorUrgencia = abiertas,
+                retenidasCalidad = retenidas,
+                jornalerosActivos = jornalerosActivos,
+                jornalerosPorCuartel = jornalerosActivos
+                    .groupBy { it.cuartelActual }
+                    .toSortedMap()
             )
         }
+    }
+
+    /**
+     * Expone el listado observable de jornaleros activos con su cuartel actual.
+     */
+    fun observarJornalerosConCuartel(): Flow<List<JornaleroCuartelResumen>> {
+        return combine(
+            parihuelaDao.observeAll(),
+            pesajeDao.observeAll(),
+            reasignacionDao.observeAll()
+        ) { parihuelas, pesajes, reasignaciones ->
+            construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones)
+        }
+    }
+
+    /**
+     * Expone el historial observable de reasignaciones de cuartel.
+     */
+    fun observarReasignaciones(): Flow<List<ReasignacionEntity>> =
+        reasignacionDao.observeAll()
+
+    /**
+     * Reasigna un jornalero a un nuevo cuartel eligiendo uno de los motivos predefinidos (AGV-005).
+     * Todo el guardado se ejecuta en una sola transacción: inserta la [ReasignacionEntity]
+     * con `sincronizado = false` y actualiza el cuartel actual del jornalero.
+     */
+    suspend fun reasignarJornaleroACuartel(
+        jornalero: String,
+        cuartelDestino: String,
+        motivo: String,
+        cuartelOrigen: String? = null,
+        hora: Date = Date()
+    ): ReasignacionEntity = enTransaccionAtomica {
+        val jornaleroLimpio = jornalero.trim()
+        val destinoLimpio = cuartelDestino.trim()
+        val motivoLimpio = motivo.trim()
+
+        require(jornaleroLimpio.isNotEmpty()) { "El jornalero es obligatorio" }
+        require(destinoLimpio.isNotEmpty()) { "El cuartel de destino es obligatorio" }
+        val motivoCanonico = MOTIVOS_REASIGNACION.firstOrNull {
+            it.equals(motivoLimpio, ignoreCase = true)
+        } ?: throw IllegalArgumentException(
+            "Debe elegir un motivo predefinido de reasignación válido"
+        )
+
+        val origenResuelto = (cuartelOrigen?.trim()?.takeIf { it.isNotEmpty() }
+            ?: obtenerCuartelActualJornaleroInterno(jornaleroLimpio))
+            ?: throw IllegalStateException(
+                "El jornalero $jornaleroLimpio no tiene cuartel de origen asignado"
+            )
+
+        require(!destinoLimpio.equals(origenResuelto, ignoreCase = true)) {
+            "El cuartel de destino ($destinoLimpio) debe ser distinto al cuartel de origen ($origenResuelto)"
+        }
+
+        val nueva = ReasignacionEntity(
+            jornalero = jornaleroLimpio,
+            cuartelOrigen = origenResuelto,
+            cuartelDestino = destinoLimpio,
+            motivo = motivoCanonico,
+            hora = hora,
+            sincronizado = false
+        )
+
+        val anterior = cuartelJornaleroStore.obtenerCuartel(jornaleroLimpio)
+        try {
+            val id = reasignacionDao.insert(nueva)
+            cuartelJornaleroStore.actualizarCuartel(jornaleroLimpio, destinoLimpio)
+            return@enTransaccionAtomica nueva.copy(id = id)
+        } catch (t: Throwable) {
+            cuartelJornaleroStore.restaurarCuartel(jornaleroLimpio, anterior)
+            throw t
+        }
+    }
+
+    private suspend fun obtenerCuartelActualJornaleroInterno(jornalero: String): String? {
+        cuartelJornaleroStore.obtenerCuartel(jornalero)?.let { return it }
+        reasignacionDao.getUltimaPorJornalero(jornalero)?.cuartelDestino?.let { return it }
+        val parihuelasById = parihuelaDao.observeAll().first().associateBy { it.id }
+        val ultimoPesaje = pesajeDao.observeAll().first()
+            .filter { it.jornalero.equals(jornalero, ignoreCase = true) }
+            .maxWithOrNull(compareBy<PesajeEntity> { it.fechaHora.time }.thenBy { it.id })
+        return ultimoPesaje?.let { parihuelasById[it.parihuelaId]?.cuartel }
+    }
+
+    private fun construirJornalerosConCuartel(
+        parihuelas: List<ParihuelaEntity>,
+        pesajes: List<PesajeEntity>,
+        reasignaciones: List<ReasignacionEntity>
+    ): List<JornaleroCuartelResumen> {
+        val parihuelasById = parihuelas.associateBy { it.id }
+        val cuartelInicialPorPesaje = linkedMapOf<String, String>()
+        val jabasPorJornalero = linkedMapOf<String, Int>()
+        val nombresCanonicos = linkedMapOf<String, String>()
+
+        pesajes
+            .sortedWith(compareBy<PesajeEntity> { it.fechaHora.time }.thenBy { it.id })
+            .forEach { p ->
+                val clave = p.jornalero.trim().lowercase()
+                nombresCanonicos.putIfAbsent(clave, p.jornalero.trim())
+                parihuelasById[p.parihuelaId]?.cuartel?.let { cuartel ->
+                    cuartelInicialPorPesaje[clave] = cuartel
+                }
+                jabasPorJornalero[clave] = (jabasPorJornalero[clave] ?: 0) + p.cantidadJabas
+            }
+
+        val cuartelPorReasignacion = linkedMapOf<String, String>()
+        reasignaciones
+            .sortedWith(compareBy<ReasignacionEntity> { it.hora.time }.thenBy { it.id })
+            .forEach { r ->
+                val clave = r.jornalero.trim().lowercase()
+                nombresCanonicos.putIfAbsent(clave, r.jornalero.trim())
+                cuartelPorReasignacion[clave] = r.cuartelDestino
+            }
+
+        val asignacionesEnStore = linkedMapOf<String, String>()
+        cuartelJornaleroStore.obtenerAsignacionesPorNombre().forEach { (nombre, cuartel) ->
+            val clave = nombre.trim().lowercase()
+            nombresCanonicos.putIfAbsent(clave, nombre.trim())
+            asignacionesEnStore[clave] = cuartel
+        }
+
+        return nombresCanonicos.entries.mapNotNull { (clave, nombre) ->
+            val cuartelActual = asignacionesEnStore[clave]
+                ?: cuartelPorReasignacion[clave]
+                ?: cuartelInicialPorPesaje[clave]
+                ?: return@mapNotNull null
+            JornaleroCuartelResumen(
+                nombre = nombre,
+                cuartelActual = cuartelActual,
+                jabasAcumuladas = jabasPorJornalero[clave] ?: 0
+            )
+        }.sortedWith(compareBy<JornaleroCuartelResumen> { it.cuartelActual }.thenBy { it.nombre })
     }
 
     /**
@@ -526,7 +892,17 @@ class ParihuelaRepository(
     ): ResultadoPesaje = enTransaccionAtomica {
         require(jornalero.isNotBlank()) { "El jornalero es obligatorio" }
         val abierta = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
-            ?: return@enTransaccionAtomica ResultadoPesaje.SinParihuelaAbierta
+            ?: run {
+                val retenida = parihuelaDao.observeByEstado(EstadoParihuela.RETENIDA_CALIDAD)
+                    .first()
+                    .firstOrNull()
+                if (retenida != null) {
+                    throw IllegalStateException(
+                        "La parihuela ${retenida.codigo} está retenida por calidad y no admite pesajes hasta liberarla"
+                    )
+                }
+                return@enTransaccionAtomica ResultadoPesaje.SinParihuelaAbierta
+            }
 
         val resultadoJabas = registrarJabasInterno(
             parihuelaId = abierta.id,
@@ -565,8 +941,8 @@ class ParihuelaRepository(
      * Expone el avance observable de la parihuela abierta actual.
      */
     fun observarAvanceParihuelaAbierta(): Flow<AvanceParihuela?> {
-        return parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).map { abiertas ->
-            val actual = abiertas.firstOrNull() ?: return@map null
+        return observarParihuelaAbierta().map { actual ->
+            actual ?: return@map null
             val jabas = actual.conteoJabas
             AvanceParihuela(
                 parihuelaId = actual.id,
@@ -634,6 +1010,7 @@ class ParihuelaRepository(
         val porNotificar = mutableListOf<ParihuelaEntity>()
 
         for (parihuela in abiertas) {
+            if (parihuela.horaInicio == null) continue
             val tiempo = calcularTiempoEspera(parihuela, ahora)
             when (tiempo.estado) {
                 EstadoTiempoEspera.EN_ESPERA -> Unit

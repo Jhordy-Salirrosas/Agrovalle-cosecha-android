@@ -5,6 +5,7 @@ package com.agrovalle.cosecha.data.local.entity
  */
 enum class EstadoParihuela {
     ABIERTA,
+    RETENIDA_CALIDAD,
     SELLADA,
     SELLADA_ANTICIPADA
 }
