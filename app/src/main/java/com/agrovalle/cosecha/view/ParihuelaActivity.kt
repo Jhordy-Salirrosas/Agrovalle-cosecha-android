@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +18,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.agrovalle.cosecha.R
+import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
+import com.agrovalle.cosecha.data.repository.JornaleroAsistenciaOpcion
+import com.agrovalle.cosecha.data.repository.SelectorJornalerosAsistencia
 import com.agrovalle.cosecha.databinding.ActivityParihuelaBinding
 import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.viewmodel.ParihuelaUiState
@@ -33,6 +38,13 @@ class ParihuelaActivity : AppCompatActivity() {
     private val permisoNotificacionesLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
 
+    private var ultimasEtiquetasSpinner: List<String> = emptyList()
+    private var opcionesActuales: List<JornaleroAsistenciaOpcion> = emptyList()
+
+    companion object {
+        private const val PROMPT_SELECCIONE_JORNALERO = "Seleccione un jornalero..."
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityParihuelaBinding.inflate(layoutInflater)
@@ -44,6 +56,11 @@ class ParihuelaActivity : AppCompatActivity() {
 
         configurarEventos()
         observarEstado()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.actualizarListaJornaleros()
     }
 
     private fun solicitarPermisoNotificacionesSiAplica() {
@@ -67,14 +84,40 @@ class ParihuelaActivity : AppCompatActivity() {
             mostrarDialogoSelladoAnticipado()
         }
 
+        binding.btnActualizarListaJornaleros.setOnClickListener {
+            viewModel.actualizarListaJornaleros()
+        }
+
+        binding.btnActualizarListaConDatos.setOnClickListener {
+            viewModel.actualizarListaJornaleros()
+        }
+
+        binding.spnJornalero.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                val elegido = if (position <= 0) {
+                    null
+                } else {
+                    opcionesActuales.getOrNull(position - 1)?.nombreCompleto
+                }
+                viewModel.seleccionarJornalero(elegido)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                viewModel.seleccionarJornalero(null)
+            }
+        }
+
         binding.btnRegistrarPesajeParihuela.setOnClickListener {
-            val jornalero = binding.etJornalero.text?.toString().orEmpty()
             val cantidad = binding.etCantidadJabas.text?.toString()?.toIntOrNull() ?: 0
             val variedad = binding.etVariedadPesaje.text?.toString().orEmpty()
             val cuartel = binding.etCuartelPesaje.text?.toString().orEmpty()
 
             viewModel.registrarPesaje(
-                jornalero = jornalero,
                 cantidadJabas = cantidad,
                 variedad = variedad,
                 cuartel = cuartel
@@ -93,6 +136,13 @@ class ParihuelaActivity : AppCompatActivity() {
     }
 
     private fun renderizar(state: ParihuelaUiState) {
+        renderizarSelectorJornalero(state)
+
+        val tieneJornaleroValido = SelectorJornalerosAsistencia.puedeRegistrarPesaje(
+            state.jornalerosDisponibles,
+            state.jornaleroSeleccionado
+        )
+
         val abierta = state.parihuelaAbierta
         val avance = state.avance
 
@@ -104,10 +154,15 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvFaltantes.text = "Faltan 100 para 100 | 120 para 120 (0%)"
             binding.btnAbrirParihuela.visibility = View.VISIBLE
             binding.btnSelladoAnticipado.visibility = View.GONE
-            binding.btnRegistrarPesajeParihuela.isEnabled = true
+            binding.btnRegistrarPesajeParihuela.isEnabled = tieneJornaleroValido
             binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
         } else {
-            binding.tvCodigoParihuela.text = "Parihuela: ${abierta.codigo}"
+            val retenida = abierta.estado == EstadoParihuela.RETENIDA_CALIDAD
+            binding.tvCodigoParihuela.text = if (retenida) {
+                "Parihuela: ${abierta.codigo} [RETENIDA POR CALIDAD]"
+            } else {
+                "Parihuela: ${abierta.codigo}"
+            }
             binding.tvDetalleParihuela.text = "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}"
             val jabas = avance?.jabasActuales ?: abierta.conteoJabas
             val f100 = avance?.faltanPara100 ?: (100 - jabas).coerceAtLeast(0)
@@ -115,15 +170,26 @@ class ParihuelaActivity : AppCompatActivity() {
             val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
             binding.tvConteoJabas.text = "$jabas / 120 jabas"
             binding.progressParihuela.progress = pct
-            if (f120 < 3) {
+            if (retenida) {
+                binding.tvFaltantes.text =
+                    "Parihuela retenida por calidad — libérela desde Incidencias antes de continuar o sellar."
+                binding.btnRegistrarPesajeParihuela.isEnabled = false
+                binding.btnRegistrarPesajeParihuela.text = "Retenida por calidad"
+                binding.btnSelladoAnticipado.isEnabled = false
+                binding.btnSelladoAnticipado.text = "Sellado bloqueado (Retenida por Calidad)"
+            } else if (f120 < 3) {
                 binding.tvFaltantes.text =
                     "Faltan $f120 para 120 ($pct%) — Menos de 3 jabas restantes: proceda a sellar la parihuela."
                 binding.btnRegistrarPesajeParihuela.isEnabled = false
                 binding.btnRegistrarPesajeParihuela.text = "Proceda a sellar la parihuela"
+                binding.btnSelladoAnticipado.isEnabled = true
+                binding.btnSelladoAnticipado.text = "Sellado anticipado"
             } else {
                 binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
-                binding.btnRegistrarPesajeParihuela.isEnabled = true
+                binding.btnRegistrarPesajeParihuela.isEnabled = tieneJornaleroValido
                 binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
+                binding.btnSelladoAnticipado.isEnabled = true
+                binding.btnSelladoAnticipado.text = "Sellado anticipado"
             }
             binding.btnAbrirParihuela.visibility = View.GONE
             binding.btnSelladoAnticipado.visibility = View.VISIBLE
@@ -136,6 +202,35 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvMensajeEstado.setTextColor(ContextCompat.getColor(this, colorRes))
         } else {
             binding.tvMensajeEstado.visibility = View.GONE
+        }
+    }
+
+    private fun renderizarSelectorJornalero(state: ParihuelaUiState) {
+        val disponibles = state.jornalerosDisponibles
+        if (disponibles.isEmpty()) {
+            binding.layoutSelectorJornalero.visibility = View.GONE
+            binding.layoutSinAsistencias.visibility = View.VISIBLE
+            opcionesActuales = emptyList()
+            ultimasEtiquetasSpinner = emptyList()
+            return
+        }
+
+        binding.layoutSelectorJornalero.visibility = View.VISIBLE
+        binding.layoutSinAsistencias.visibility = View.GONE
+
+        val nuevasEtiquetas = listOf(PROMPT_SELECCIONE_JORNALERO) + disponibles.map { it.etiqueta }
+        if (nuevasEtiquetas != ultimasEtiquetasSpinner) {
+            opcionesActuales = disponibles
+            ultimasEtiquetasSpinner = nuevasEtiquetas
+            binding.spnJornalero.adapter = ArrayAdapter(
+                this,
+                android.R.layout.simple_spinner_dropdown_item,
+                nuevasEtiquetas
+            )
+            val idx = disponibles.indexOfFirst {
+                it.nombreCompleto.equals(state.jornaleroSeleccionado, ignoreCase = true)
+            }
+            binding.spnJornalero.setSelection(if (idx >= 0) idx + 1 else 0, false)
         }
     }
 

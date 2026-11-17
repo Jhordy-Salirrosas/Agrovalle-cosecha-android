@@ -24,7 +24,7 @@ data class ParihuelaEntity(
     val conteoJabas: Int = 0,
     val pisos: Int = 0,
     @ColumnInfo(name = "hora_inicio")
-    val horaInicio: Date,
+    val horaInicio: Date? = null,
     @ColumnInfo(name = "hora_sellado")
     val horaSellado: Date? = null,
     @ColumnInfo(name = "motivo_sellado_anticipado")

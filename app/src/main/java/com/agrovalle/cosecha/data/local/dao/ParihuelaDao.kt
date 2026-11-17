@@ -27,9 +27,9 @@ interface ParihuelaDao {
     @Query("SELECT * FROM parihuelas WHERE codigo = :codigo LIMIT 1")
     suspend fun getByCodigo(codigo: String): ParihuelaEntity?
 
-    @Query("SELECT * FROM parihuelas WHERE estado = :estado ORDER BY hora_inicio DESC")
+    @Query("SELECT * FROM parihuelas WHERE estado = :estado ORDER BY COALESCE(hora_inicio, 0) DESC, id DESC")
     fun observeByEstado(estado: EstadoParihuela): Flow<List<ParihuelaEntity>>
 
-    @Query("SELECT * FROM parihuelas ORDER BY hora_inicio DESC")
+    @Query("SELECT * FROM parihuelas ORDER BY COALESCE(hora_inicio, 0) DESC, id DESC")
     fun observeAll(): Flow<List<ParihuelaEntity>>
 }

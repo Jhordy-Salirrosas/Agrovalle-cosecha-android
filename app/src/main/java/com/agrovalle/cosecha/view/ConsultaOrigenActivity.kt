@@ -75,13 +75,20 @@ class ConsultaOrigenActivity : AppCompatActivity() {
 
                         is ConsultaOrigenParihuela.Encontrado -> {
                             val o = resultado.origen
+                            val estadoLegible = when (o.estado) {
+                                EstadoParihuela.RETENIDA_CALIDAD -> "RETENIDA POR CALIDAD"
+                                else -> o.estado.name
+                            }
                             binding.tvResultadoOrigen.text = buildString {
                                 appendLine("Código: ${o.codigo}")
-                                appendLine("Estado: ${o.estado}")
+                                appendLine("Estado: $estadoLegible")
+                                if (o.estado == EstadoParihuela.RETENIDA_CALIDAD) {
+                                    appendLine("Aviso: Retenida por calidad (no se puede sellar hasta liberar)")
+                                }
                                 appendLine("Variedad: ${o.variedad}")
                                 appendLine("Cuartel: ${o.cuartel}")
                                 appendLine("Jabas: ${o.conteoJabas} | Pisos: ${o.pisos}")
-                                appendLine("Inicio: ${formatoFecha.format(o.horaInicio)}")
+                                appendLine("Inicio: ${o.horaInicio?.let { formatoFecha.format(it) } ?: "Sin iniciar (sin pesajes)"}")
                                 appendLine("Sellado: ${o.horaSellado?.let { formatoFecha.format(it) } ?: "Pendiente"}")
                                 if (!o.motivoSelladoAnticipado.isNullOrBlank()) {
                                     append("Motivo sellado anticipado: ${o.motivoSelladoAnticipado}")

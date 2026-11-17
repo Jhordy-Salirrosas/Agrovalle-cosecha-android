@@ -147,6 +147,15 @@ object DatosMemoria {
     fun contarAsistencias(fecha: String): Int =
         asistencias.count { it.fecha == fecha }
 
+    /** AGV-006: jornaleros que registraron asistencia en la fecha indicada. */
+    fun jornalerosConAsistencia(fecha: String): List<Jornalero> =
+        asistencias
+            .asSequence()
+            .filter { it.fecha == fecha }
+            .mapNotNull { buscarJornaleroPorId(it.jornaleroId) }
+            .distinctBy { it.id }
+            .toList()
+
     // ------------------------------------------------------------------------
     // Asignaciones y pesajes
     // ------------------------------------------------------------------------
