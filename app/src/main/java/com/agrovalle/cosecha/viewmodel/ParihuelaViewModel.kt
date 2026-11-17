@@ -4,11 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.agrovalle.cosecha.data.local.AgroValleDatabase
-import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.repository.AvanceParihuela
+import com.agrovalle.cosecha.data.repository.JornaleroAsistenciaOpcion
 import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.ResultadoPesaje
+import com.agrovalle.cosecha.data.repository.SelectorJornalerosAsistencia
+import com.agrovalle.cosecha.util.FechaHoraUtil
+import com.agrovalle.cosecha.util.SesionTurno
 import com.agrovalle.cosecha.worker.TiempoEsperaWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +23,15 @@ import kotlinx.coroutines.launch
 data class ParihuelaUiState(
     val parihuelaAbierta: ParihuelaEntity? = null,
     val avance: AvanceParihuela? = null,
+    val jornalerosDisponibles: List<JornaleroAsistenciaOpcion> = emptyList(),
+    val jornaleroSeleccionado: String? = null,
     val mensaje: String? = null,
     val esError: Boolean = false
 )
 
 /**
  * ViewModel para la pantalla principal de gestión de parihuela (Sprint 2).
- * Consume únicamente [ParihuelaRepository].
+ * Consume únicamente [ParihuelaRepository] y [SelectorJornalerosAsistencia].
  */
 class ParihuelaViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -39,6 +44,7 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     private var ultimaParihuelaConAlertaId: Long? = null
 
     init {
+        actualizarListaJornaleros()
         viewModelScope.launch {
             combine(
                 repository.observarParihuelaAbierta(),
@@ -62,6 +68,34 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                 }
             }
+        }
+    }
+
+    fun actualizarListaJornaleros() {
+        val fechaHoy = SesionTurno.fechaJornada.value ?: FechaHoraUtil.hoy()
+        val lista = SelectorJornalerosAsistencia.cargarParaFecha(fechaHoy)
+        _uiState.update { actual ->
+            val seleccionadoVigente = actual.jornaleroSeleccionado?.takeIf { sel ->
+                SelectorJornalerosAsistencia.puedeRegistrarPesaje(lista, sel)
+            }
+            actual.copy(
+                jornalerosDisponibles = lista,
+                jornaleroSeleccionado = seleccionadoVigente
+            )
+        }
+    }
+
+    fun seleccionarJornalero(nombreCompleto: String?) {
+        val limpio = nombreCompleto?.trim()?.takeIf { it.isNotEmpty() }
+        _uiState.update { actual ->
+            val valido = if (limpio != null &&
+                SelectorJornalerosAsistencia.puedeRegistrarPesaje(actual.jornalerosDisponibles, limpio)
+            ) {
+                limpio
+            } else {
+                null
+            }
+            actual.copy(jornaleroSeleccionado = valido)
         }
     }
 
@@ -98,11 +132,22 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun registrarPesaje(
-        jornalero: String,
+        jornalero: String = _uiState.value.jornaleroSeleccionado.orEmpty(),
         cantidadJabas: Int,
         variedad: String,
         cuartel: String
     ) {
+        val disponibles = _uiState.value.jornalerosDisponibles
+        if (!SelectorJornalerosAsistencia.puedeRegistrarPesaje(disponibles, jornalero)) {
+            _uiState.update {
+                it.copy(
+                    mensaje = "Debe seleccionar un jornalero con asistencia registrada hoy.",
+                    esError = true
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             try {
                 when (
