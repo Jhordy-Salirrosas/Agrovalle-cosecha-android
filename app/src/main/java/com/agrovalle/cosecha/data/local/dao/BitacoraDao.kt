@@ -16,6 +16,9 @@ interface BitacoraDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(bitacora: BitacoraEntity): Long
 
+    @Query("SELECT EXISTS(SELECT 1 FROM bitacora WHERE parihuela_id = :parihuelaId AND evento = :evento)")
+    suspend fun existeEvento(parihuelaId: Long, evento: String): Boolean
+
     @Query("SELECT * FROM bitacora WHERE parihuela_id = :parihuelaId ORDER BY fecha_hora DESC")
     fun observeByParihuela(parihuelaId: Long): Flow<List<BitacoraEntity>>
 

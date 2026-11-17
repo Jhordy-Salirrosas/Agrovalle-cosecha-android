@@ -12,8 +12,17 @@ import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Ejecutor de bloques transaccionales (Room withTransaction en producción).
+ */
+interface TransaccionRunner {
+    suspend fun <T> ejecutar(bloque: suspend () -> T): T
+}
 
 /**
  * Estados derivados del tiempo de espera de una parihuela abierta.
@@ -98,6 +107,10 @@ sealed interface ResultadoPesaje {
     ) : ResultadoPesaje
 
     data class RechazadoPorMezcla(val incidencia: IncidenciaEntity) : ResultadoPesaje
+    data class RechazadoPorCapacidad(
+        val parihuela: ParihuelaEntity,
+        val jabasFaltantes: Int
+    ) : ResultadoPesaje
     data object SinParihuelaAbierta : ResultadoPesaje
 }
 
@@ -109,6 +122,7 @@ data class ResultadoRegistroJabas(
     val nuevaParihuela: ParihuelaEntity? = null,
     val selladaPorLimite: Boolean = false,
     val rechazadoPorMezcla: Boolean = false,
+    val rechazadoPorCapacidad: Boolean = false,
     val incidenciaGenerada: IncidenciaEntity? = null
 )
 
@@ -119,10 +133,16 @@ class ParihuelaRepository(
     private val parihuelaDao: ParihuelaDao,
     private val bitacoraDao: BitacoraDao,
     private val incidenciaDao: IncidenciaDao,
-    private val pesajeDao: PesajeDao
+    private val pesajeDao: PesajeDao,
+    private val transaccionRunner: TransaccionRunner = object : TransaccionRunner {
+        override suspend fun <T> ejecutar(bloque: suspend () -> T): T = bloque()
+    }
 ) {
 
     companion object {
+        private val mutexTransaccion = Mutex()
+        private val secuenciaCodigo = AtomicInteger(0)
+
         const val LIMITE_JABAS = 120
         const val LIMITE_ESPERA_MS = 30L * 60L * 1000L
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
@@ -145,22 +165,46 @@ class ParihuelaRepository(
         }
     }
 
-    private val secuenciaCodigo = AtomicInteger(0)
+    private suspend fun <T> enTransaccionAtomica(bloque: suspend () -> T): T {
+        return mutexTransaccion.withLock {
+            transaccionRunner.ejecutar(bloque)
+        }
+    }
 
     /**
      * Abre una nueva parihuela generando un código único.
+     * Garantiza que solo exista una parihuela ABIERTA a la vez.
      */
     suspend fun abrirNuevaParihuela(
         variedad: String,
         cuartel: String,
         ahora: Date = Date()
+    ): ParihuelaEntity = enTransaccionAtomica {
+        abrirNuevaParihuelaInterno(variedad, cuartel, ahora)
+    }
+
+    private suspend fun abrirNuevaParihuelaInterno(
+        variedad: String,
+        cuartel: String,
+        ahora: Date
     ): ParihuelaEntity {
+        val variedadLimpia = variedad.trim()
+        val cuartelLimpio = cuartel.trim()
+        require(variedadLimpia.isNotEmpty() && cuartelLimpio.isNotEmpty()) {
+            "La variedad y el cuartel son obligatorios para abrir una parihuela"
+        }
+
+        val abiertaExistente = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
+        check(abiertaExistente == null) {
+            "Ya existe una parihuela abierta (${abiertaExistente?.codigo})"
+        }
+
         val codigo = generarCodigoUnico(ahora)
         val nueva = ParihuelaEntity(
             codigo = codigo,
             estado = EstadoParihuela.ABIERTA,
-            variedad = variedad,
-            cuartel = cuartel,
+            variedad = variedadLimpia,
+            cuartel = cuartelLimpio,
             conteoJabas = 0,
             pisos = 0,
             horaInicio = ahora
@@ -168,6 +212,12 @@ class ParihuelaRepository(
         val id = parihuelaDao.insert(nueva)
         return nueva.copy(id = id)
     }
+
+    /**
+     * Expone la parihuela abierta actual desde el repositorio.
+     */
+    fun observarParihuelaAbierta(): Flow<ParihuelaEntity?> =
+        parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).map { it.firstOrNull() }
 
     /**
      * Incrementa el conteo de jabas de una parihuela abierta validando que no exista
@@ -182,6 +232,16 @@ class ParihuelaRepository(
         variedad: String,
         cuartel: String,
         ahora: Date = Date()
+    ): ResultadoRegistroJabas = enTransaccionAtomica {
+        registrarJabasInterno(parihuelaId, cantidad, variedad, cuartel, ahora)
+    }
+
+    private suspend fun registrarJabasInterno(
+        parihuelaId: Long,
+        cantidad: Int,
+        variedad: String,
+        cuartel: String,
+        ahora: Date
     ): ResultadoRegistroJabas {
         require(cantidad > 0) { "La cantidad de jabas debe ser mayor a 0" }
 
@@ -202,17 +262,22 @@ class ParihuelaRepository(
             )
         }
 
+        val variedadLimpia = variedad.trim()
+        val cuartelLimpio = cuartel.trim()
+        require(variedadLimpia.isNotEmpty()) { "La variedad del pesaje es obligatoria" }
+        require(cuartelLimpio.isNotEmpty()) { "El cuartel del pesaje es obligatorio" }
+
         val tipoMezcla = when {
-            !variedad.equals(actual.variedad, ignoreCase = true) -> TIPO_MEZCLA_VARIEDAD
-            !cuartel.equals(actual.cuartel, ignoreCase = true) -> TIPO_MEZCLA_CUARTEL
+            !variedadLimpia.equals(actual.variedad.trim(), ignoreCase = true) -> TIPO_MEZCLA_VARIEDAD
+            !cuartelLimpio.equals(actual.cuartel.trim(), ignoreCase = true) -> TIPO_MEZCLA_CUARTEL
             else -> null
         }
 
         if (tipoMezcla != null) {
             val detalle = if (tipoMezcla == TIPO_MEZCLA_VARIEDAD) {
-                "Variedad entrante '$variedad' difiere de '${actual.variedad}'"
+                "Variedad entrante '$variedadLimpia' difiere de '${actual.variedad}'"
             } else {
-                "Cuartel entrante '$cuartel' difiere de '${actual.cuartel}'"
+                "Cuartel entrante '$cuartelLimpio' difiere de '${actual.cuartel}'"
             }
             val incidencia = IncidenciaEntity(
                 parihuelaId = actual.id,
@@ -229,13 +294,22 @@ class ParihuelaRepository(
         }
 
         val nuevoConteo = actual.conteoJabas + cantidad
-        if (nuevoConteo >= LIMITE_JABAS) {
+        if (nuevoConteo > LIMITE_JABAS) {
+            return ResultadoRegistroJabas(
+                parihuela = actual,
+                rechazadoPorCapacidad = true
+            )
+        }
+
+        if (nuevoConteo == LIMITE_JABAS) {
             val sellada = actual.copy(
                 conteoJabas = nuevoConteo,
                 estado = EstadoParihuela.SELLADA,
                 horaSellado = ahora
             )
             parihuelaDao.update(sellada)
+
+            registrarRetencionExcedidaSiCorresponde(actual, ahora)
 
             bitacoraDao.insert(
                 BitacoraEntity(
@@ -246,7 +320,7 @@ class ParihuelaRepository(
                 )
             )
 
-            val siguiente = abrirNuevaParihuela(
+            val siguiente = abrirNuevaParihuelaInterno(
                 variedad = actual.variedad,
                 cuartel = actual.cuartel,
                 ahora = ahora
@@ -275,7 +349,7 @@ class ParihuelaRepository(
         parihuelaId: Long,
         motivo: String,
         ahora: Date = Date()
-    ): ParihuelaEntity {
+    ): ParihuelaEntity = enTransaccionAtomica {
         val motivoLimpio = motivo.trim()
         require(motivoLimpio.isNotEmpty()) {
             "El motivo de sellado anticipado es obligatorio"
@@ -303,6 +377,8 @@ class ParihuelaRepository(
         )
         parihuelaDao.update(sellada)
 
+        registrarRetencionExcedidaSiCorresponde(actual, ahora)
+
         bitacoraDao.insert(
             BitacoraEntity(
                 parihuelaId = sellada.id,
@@ -312,7 +388,26 @@ class ParihuelaRepository(
             )
         )
 
-        return sellada
+        return@enTransaccionAtomica sellada
+    }
+
+    private suspend fun registrarRetencionExcedidaSiCorresponde(
+        parihuela: ParihuelaEntity,
+        ahora: Date
+    ) {
+        val tiempo = calcularTiempoEspera(parihuela, ahora)
+        if (tiempo.estado == EstadoTiempoEspera.EXCEDIDA &&
+            !bitacoraDao.existeEvento(parihuela.id, EVENTO_RETENCION_EXCEDIDA)
+        ) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = parihuela.id,
+                    evento = EVENTO_RETENCION_EXCEDIDA,
+                    detalle = "Retención de tiempo excedida para parihuela ${parihuela.codigo}",
+                    fechaHora = ahora
+                )
+            )
+        }
     }
 
     /**
@@ -428,12 +523,12 @@ class ParihuelaRepository(
         variedad: String,
         cuartel: String,
         ahora: Date = Date()
-    ): ResultadoPesaje {
+    ): ResultadoPesaje = enTransaccionAtomica {
         require(jornalero.isNotBlank()) { "El jornalero es obligatorio" }
         val abierta = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
-            ?: return ResultadoPesaje.SinParihuelaAbierta
+            ?: return@enTransaccionAtomica ResultadoPesaje.SinParihuelaAbierta
 
-        val resultadoJabas = registrarJabas(
+        val resultadoJabas = registrarJabasInterno(
             parihuelaId = abierta.id,
             cantidad = cantidadJabas,
             variedad = variedad,
@@ -442,7 +537,15 @@ class ParihuelaRepository(
         )
 
         if (resultadoJabas.rechazadoPorMezcla) {
-            return ResultadoPesaje.RechazadoPorMezcla(resultadoJabas.incidenciaGenerada!!)
+            return@enTransaccionAtomica ResultadoPesaje.RechazadoPorMezcla(resultadoJabas.incidenciaGenerada!!)
+        }
+
+        if (resultadoJabas.rechazadoPorCapacidad) {
+            val faltantes = (LIMITE_JABAS - abierta.conteoJabas).coerceAtLeast(0)
+            return@enTransaccionAtomica ResultadoPesaje.RechazadoPorCapacidad(
+                parihuela = abierta,
+                jabasFaltantes = faltantes
+            )
         }
 
         val pesaje = PesajeEntity(
@@ -452,7 +555,7 @@ class ParihuelaRepository(
             fechaHora = ahora
         )
         val pesajeId = pesajeDao.insert(pesaje)
-        return ResultadoPesaje.Registrado(
+        return@enTransaccionAtomica ResultadoPesaje.Registrado(
             pesaje = pesaje.copy(id = pesajeId),
             resultadoJabas = resultadoJabas
         )
@@ -494,7 +597,7 @@ class ParihuelaRepository(
         pesajeId: Long,
         nuevoJornalero: String,
         ahora: Date = Date()
-    ): PesajeEntity {
+    ): PesajeEntity = enTransaccionAtomica {
         val jornaleroLimpio = nuevoJornalero.trim()
         require(jornaleroLimpio.isNotEmpty()) { "El nuevo jornalero es obligatorio" }
 
@@ -519,16 +622,15 @@ class ParihuelaRepository(
 
         val actualizado = pesaje.copy(jornalero = jornaleroLimpio)
         pesajeDao.update(actualizado)
-        return actualizado
+        return@enTransaccionAtomica actualizado
     }
 
     /**
-     * Evalúa las parihuelas abiertas y decide cuáles deben disparar notificación POR_VENCER
-     * (una sola vez por parihuela) y cuáles deben marcar RETENCION_EXCEDIDA (una sola vez).
+     * Evalúa las parihuelas abiertas de forma atómica y decide cuáles deben disparar
+     * notificación POR_VENCER (una sola vez) y cuáles deben marcar RETENCION_EXCEDIDA (una sola vez).
      */
-    suspend fun evaluarAlertasTiempo(ahora: Date = Date()): List<ParihuelaEntity> {
+    suspend fun evaluarAlertasTiempo(ahora: Date = Date()): List<ParihuelaEntity> = enTransaccionAtomica {
         val abiertas = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first()
-        val eventosExistentes = bitacoraDao.observeAll().first()
         val porNotificar = mutableListOf<ParihuelaEntity>()
 
         for (parihuela in abiertas) {
@@ -536,9 +638,7 @@ class ParihuelaRepository(
             when (tiempo.estado) {
                 EstadoTiempoEspera.EN_ESPERA -> Unit
                 EstadoTiempoEspera.POR_VENCER -> {
-                    val yaAvisada = eventosExistentes.any {
-                        it.parihuelaId == parihuela.id && it.evento == EVENTO_ALERTA_POR_VENCER
-                    }
+                    val yaAvisada = bitacoraDao.existeEvento(parihuela.id, EVENTO_ALERTA_POR_VENCER)
                     if (!yaAvisada) {
                         bitacoraDao.insert(
                             BitacoraEntity(
@@ -553,9 +653,7 @@ class ParihuelaRepository(
                 }
 
                 EstadoTiempoEspera.EXCEDIDA -> {
-                    val yaMarcada = eventosExistentes.any {
-                        it.parihuelaId == parihuela.id && it.evento == EVENTO_RETENCION_EXCEDIDA
-                    }
+                    val yaMarcada = bitacoraDao.existeEvento(parihuela.id, EVENTO_RETENCION_EXCEDIDA)
                     if (!yaMarcada) {
                         bitacoraDao.insert(
                             BitacoraEntity(
@@ -565,11 +663,12 @@ class ParihuelaRepository(
                                 fechaHora = ahora
                             )
                         )
+                        porNotificar.add(parihuela)
                     }
                 }
             }
         }
-        return porNotificar
+        return@enTransaccionAtomica porNotificar
     }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {

@@ -56,4 +56,26 @@ object NotificacionTiempoUtil {
 
         NotificationManagerCompat.from(context).notify(parihuela.id.toInt(), notification)
     }
+
+    fun mostrarAlertaRetencionExcedida(context: Context, parihuela: ParihuelaEntity) {
+        crearCanal(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val permiso = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (permiso != PackageManager.PERMISSION_GRANTED) return
+        }
+
+        val notification = NotificationCompat.Builder(context, CANAL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Retención excedida: ${parihuela.codigo}")
+            .setContentText("La parihuela superó el tiempo máximo de espera (${parihuela.variedad} - ${parihuela.cuartel}).")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(context).notify(10_000 + parihuela.id.toInt(), notification)
+    }
 }

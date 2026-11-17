@@ -31,27 +31,29 @@ data class ParihuelaUiState(
 class ParihuelaViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: ParihuelaRepository by lazy {
-        val db = AgroValleDatabase.getInstance(application)
-        ParihuelaRepository(
-            parihuelaDao = db.parihuelaDao(),
-            bitacoraDao = db.bitacoraDao(),
-            incidenciaDao = db.incidenciaDao(),
-            pesajeDao = db.pesajeDao()
-        )
+        AgroValleDatabase.getInstance(application).crearParihuelaRepository()
     }
 
     private val _uiState = MutableStateFlow(ParihuelaUiState())
     val uiState: StateFlow<ParihuelaUiState> = _uiState.asStateFlow()
+    private var ultimaParihuelaConAlertaId: Long? = null
 
     init {
-        val db = AgroValleDatabase.getInstance(application)
         viewModelScope.launch {
             combine(
-                db.parihuelaDao().observeByEstado(EstadoParihuela.ABIERTA),
+                repository.observarParihuelaAbierta(),
                 repository.observarAvanceParihuelaAbierta()
-            ) { abiertas, avance ->
-                abiertas.firstOrNull() to avance
+            ) { abierta, avance ->
+                abierta to avance
             }.collect { (abierta, avance) ->
+                if (abierta != null && abierta.id != ultimaParihuelaConAlertaId) {
+                    ultimaParihuelaConAlertaId = abierta.id
+                    TiempoEsperaWorker.programarAlertaExacta(
+                        context = getApplication(),
+                        parihuelaId = abierta.id,
+                        horaInicio = abierta.horaInicio
+                    )
+                }
                 _uiState.update {
                     it.copy(
                         parihuelaAbierta = abierta,
@@ -63,18 +65,38 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun abrirNuevaParihuela(variedad: String, cuartel: String) {
-        viewModelScope.launch {
-            val nueva = repository.abrirNuevaParihuela(variedad.trim(), cuartel.trim())
-            TiempoEsperaWorker.programarAlertaExacta(
-                context = getApplication(),
-                parihuelaId = nueva.id,
-                horaInicio = nueva.horaInicio
-            )
+        val v = variedad.trim()
+        val c = cuartel.trim()
+        if (v.isEmpty() || c.isEmpty()) {
             _uiState.update {
                 it.copy(
-                    mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",
-                    esError = false
+                    mensaje = "Debe ingresar variedad y cuartel para abrir la parihuela.",
+                    esError = true
                 )
+            }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val nueva = repository.abrirNuevaParihuela(v, c)
+                TiempoEsperaWorker.programarAlertaExacta(
+                    context = getApplication(),
+                    parihuelaId = nueva.id,
+                    horaInicio = nueva.horaInicio
+                )
+                _uiState.update {
+                    it.copy(
+                        mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",
+                        esError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        mensaje = e.message ?: "No se pudo abrir la parihuela",
+                        esError = true
+                    )
+                }
             }
         }
     }
@@ -108,6 +130,15 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                         _uiState.update {
                             it.copy(
                                 mensaje = "Registro rechazado (${res.incidencia.tipo}): ${res.incidencia.detalle}. Se registró la incidencia.",
+                                esError = true
+                            )
+                        }
+                    }
+
+                    is ResultadoPesaje.RechazadoPorCapacidad -> {
+                        _uiState.update {
+                            it.copy(
+                                mensaje = "Registro rechazado por capacidad: solo faltan ${res.jabasFaltantes} jabas para llegar a ${ParihuelaRepository.LIMITE_JABAS}.",
                                 esError = true
                             )
                         }

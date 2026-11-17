@@ -10,14 +10,15 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.agrovalle.cosecha.data.local.AgroValleDatabase
+import com.agrovalle.cosecha.data.repository.EstadoTiempoEspera
 import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
 /**
- * Worker periódico que evalúa las parihuelas abiertas desde la BD
- * y dispara alertas de alta prioridad cuando entran en POR_VENCER.
+ * Worker periódico y exacto que evalúa las parihuelas abiertas desde la BD
+ * y dispara alertas de alta prioridad cuando entran en POR_VENCER o EXCEDIDA.
  */
 class TiempoEsperaWorker(
     appContext: Context,
@@ -26,15 +27,16 @@ class TiempoEsperaWorker(
 
     override suspend fun doWork(): Result {
         val db = AgroValleDatabase.getInstance(applicationContext)
-        val repository = ParihuelaRepository(
-            parihuelaDao = db.parihuelaDao(),
-            bitacoraDao = db.bitacoraDao(),
-            incidenciaDao = db.incidenciaDao(),
-            pesajeDao = db.pesajeDao()
-        )
-        val porNotificar = repository.evaluarAlertasTiempo()
+        val repository = db.crearParihuelaRepository()
+        val ahora = Date()
+        val porNotificar = repository.evaluarAlertasTiempo(ahora)
         porNotificar.forEach { parihuela ->
-            NotificacionTiempoUtil.mostrarAlertaPorVencer(applicationContext, parihuela)
+            val estado = repository.calcularTiempoEspera(parihuela, ahora).estado
+            if (estado == EstadoTiempoEspera.EXCEDIDA) {
+                NotificacionTiempoUtil.mostrarAlertaRetencionExcedida(applicationContext, parihuela)
+            } else {
+                NotificacionTiempoUtil.mostrarAlertaPorVencer(applicationContext, parihuela)
+            }
         }
         return Result.success()
     }
@@ -71,7 +73,7 @@ class TiempoEsperaWorker(
 
             WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
                 "alerta_exacta_parihuela_$parihuelaId",
-                ExistingWorkPolicy.REPLACE,
+                ExistingWorkPolicy.KEEP,
                 request
             )
         }

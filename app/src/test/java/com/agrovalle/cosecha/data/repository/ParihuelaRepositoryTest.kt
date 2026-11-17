@@ -330,15 +330,25 @@ class ParihuelaRepositoryTest {
     @Test
     fun `resumen del panel calcula totales y agrupa jabas por variedad y cuartel`() = runBlocking {
         val base = 1_700_000_000_000L
-        val p1 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(base))
-        repository.registrarJabas(p1.id, 120, "Biloxi", "Cuartel 01", Date(base + 10_000L))
-        // Al llegar a 120 se abre p2 automaticamente con Biloxi / Cuartel 01 y 0 jabas
-        val p3 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", Date(base + 20_000L))
-        repository.registrarJabas(p3.id, 30, "Ventura", "Cuartel 05", Date(base + 30_000L))
-        repository.sellarAnticipadamente(p3.id, "Fin de turno", Date(base + 40_000L))
+        val p3 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", Date(base))
+        repository.registrarJabas(p3.id, 30, "Ventura", "Cuartel 05", Date(base + 10_000L))
+        repository.sellarAnticipadamente(p3.id, "Fin de turno", Date(base + 20_000L))
 
-        val p4 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 12", Date(base + 50_000L))
-        repository.registrarJabas(p4.id, 15, "Biloxi", "Cuartel 12", Date(base + 60_000L))
+        val p1 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(base + 30_000L))
+        repository.registrarJabas(p1.id, 120, "Biloxi", "Cuartel 01", Date(base + 40_000L))
+        // Al llegar a 120 se abre p2 automaticamente con Biloxi / Cuartel 01 y 0 jabas
+
+        val p4Id = parihuelaDao.insert(
+            ParihuelaEntity(
+                codigo = "PAR-PANEL-04",
+                estado = EstadoParihuela.ABIERTA,
+                variedad = "Biloxi",
+                cuartel = "Cuartel 12",
+                conteoJabas = 15,
+                horaInicio = Date(base + 50_000L)
+            )
+        )
+        assertTrue(p4Id > 0)
 
         val resumen = repository.observarResumenPanel { Date(base + 100_000L) }.first()
 
@@ -356,26 +366,38 @@ class ParihuelaRepositoryTest {
     @Test
     fun `resumen del panel ordena parihuelas abiertas de menor a mayor tiempo restante`() = runBlocking {
         val ahora = Date(1_700_000_000_000L)
-        val reciente = repository.abrirNuevaParihuela(
-            "Biloxi",
-            "Cuartel 01",
-            Date(ahora.time - 2 * 60_000L)
+        val recienteId = parihuelaDao.insert(
+            ParihuelaEntity(
+                codigo = "PAR-REC-01",
+                estado = EstadoParihuela.ABIERTA,
+                variedad = "Biloxi",
+                cuartel = "Cuartel 01",
+                horaInicio = Date(ahora.time - 2 * 60_000L)
+            )
         )
-        val urgente = repository.abrirNuevaParihuela(
-            "Ventura",
-            "Cuartel 05",
-            Date(ahora.time - 28 * 60_000L)
+        val urgenteId = parihuelaDao.insert(
+            ParihuelaEntity(
+                codigo = "PAR-URG-02",
+                estado = EstadoParihuela.ABIERTA,
+                variedad = "Ventura",
+                cuartel = "Cuartel 05",
+                horaInicio = Date(ahora.time - 28 * 60_000L)
+            )
         )
-        val media = repository.abrirNuevaParihuela(
-            "Biloxi",
-            "Cuartel 12",
-            Date(ahora.time - 15 * 60_000L)
+        val mediaId = parihuelaDao.insert(
+            ParihuelaEntity(
+                codigo = "PAR-MED-03",
+                estado = EstadoParihuela.ABIERTA,
+                variedad = "Biloxi",
+                cuartel = "Cuartel 12",
+                horaInicio = Date(ahora.time - 15 * 60_000L)
+            )
         )
 
         val resumen = repository.observarResumenPanel { ahora }.first()
 
         assertEquals(
-            listOf(urgente.id, media.id, reciente.id),
+            listOf(urgenteId, mediaId, recienteId),
             resumen.abiertasPorUrgencia.map { it.parihuela.id }
         )
         assertEquals(EstadoTiempoEspera.POR_VENCER, resumen.abiertasPorUrgencia.first().tiempoEspera.estado)
@@ -506,7 +528,7 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
-    fun `evaluarAlertasTiempo marca RETENCION_EXCEDIDA una sola vez`() = runBlocking {
+    fun `evaluarAlertasTiempo marca RETENCION_EXCEDIDA y notifica una sola vez`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
         val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", inicio)
         val excedida = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
@@ -514,7 +536,7 @@ class ParihuelaRepositoryTest {
         val primera = repository.evaluarAlertasTiempo(excedida)
         val segunda = repository.evaluarAlertasTiempo(Date(excedida.time + 60_000L))
 
-        assertTrue(primera.isEmpty())
+        assertEquals(listOf(parihuela.id), primera.map { it.id })
         assertTrue(segunda.isEmpty())
         assertEquals(
             1,
@@ -573,6 +595,91 @@ class ParihuelaRepositoryTest {
         assertEquals(ParihuelaRepository.TIPO_MEZCLA_VARIEDAD, incidencias.first().tipo)
     }
 
+    @Test
+    fun `pesaje que supera las 120 jabas es rechazado por capacidad sin alterar conteo ni crear incidencia`() = runBlocking {
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
+        repository.registrarPesaje("Juan Perez", 118, "Biloxi", "Cuartel 01")
+
+        val resPesaje = repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01")
+
+        assertTrue(resPesaje is ResultadoPesaje.RechazadoPorCapacidad)
+        val rechazado = resPesaje as ResultadoPesaje.RechazadoPorCapacidad
+        assertEquals(2, rechazado.jabasFaltantes)
+        assertEquals(118, parihuelaDao.getById(parihuela.id)!!.conteoJabas)
+        assertEquals(EstadoParihuela.ABIERTA, parihuelaDao.getById(parihuela.id)!!.estado)
+        assertTrue(incidenciaDao.items.isEmpty())
+        assertEquals(1, pesajeDao.items.size)
+    }
+
+    @Test
+    fun `ajuste exacto a 120 jabas tras rechazo por capacidad sella la parihuela y abre la siguiente`() = runBlocking {
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
+        repository.registrarPesaje("Juan Perez", 118, "Biloxi", "Cuartel 01")
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01") // rechazado por capacidad
+
+        val exacto = repository.registrarPesaje("Juan Perez", 2, "Biloxi", "Cuartel 01")
+
+        assertTrue(exacto is ResultadoPesaje.Registrado)
+        val registrado = exacto as ResultadoPesaje.Registrado
+        assertTrue(registrado.resultadoJabas.selladaPorLimite)
+        assertEquals(120, parihuelaDao.getById(parihuela.id)!!.conteoJabas)
+        assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(parihuela.id)!!.estado)
+        assertNotNull(registrado.resultadoJabas.nuevaParihuela)
+    }
+
+    @Test
+    fun `abrirNuevaParihuela rechaza crear una segunda si ya existe una ABIERTA`() = runBlocking {
+        val primera = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
+
+        try {
+            repository.abrirNuevaParihuela("Ventura", "Cuartel 05", Date(1_700_000_010_000L))
+            fail("Debió rechazar abrir una segunda parihuela mientras la primera sigue abierta")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        val abiertas = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first()
+        assertEquals(1, abiertas.size)
+        assertEquals(primera.id, abiertas.first().id)
+    }
+
+    @Test
+    fun `comparacion anti-mezcla recorta espacios y rechaza variedad o cuartel en blanco sin incidencia`() = runBlocking {
+        val parihuela = repository.abrirNuevaParihuela("  Biloxi ", " Cuartel 01  ", Date(1_700_000_000_000L))
+
+        val resultado = repository.registrarJabas(
+            parihuelaId = parihuela.id,
+            cantidad = 10,
+            variedad = "  biloxi  ",
+            cuartel = "  cuartel 01 "
+        )
+        assertFalse(resultado.rechazadoPorMezcla)
+        assertEquals(10, resultado.parihuela.conteoJabas)
+        assertTrue(incidenciaDao.items.isEmpty())
+
+        try {
+            repository.registrarJabas(parihuela.id, 5, "   ", "Cuartel 01")
+            fail("Debió rechazar variedad en blanco")
+        } catch (expected: IllegalArgumentException) {
+            // Esperado
+        }
+        assertTrue(incidenciaDao.items.isEmpty())
+        assertEquals(10, parihuelaDao.getById(parihuela.id)!!.conteoJabas)
+    }
+
+    @Test
+    fun `sellar parihuela con retencion ya excedida sin marca previa registra RETENCION_EXCEDIDA`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val despuesDelLimite = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 120_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+
+        repository.sellarAnticipadamente(parihuela.id, "Cierre tardío", despuesDelLimite)
+
+        val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_RETENCION_EXCEDIDA })
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO })
+    }
+
     private class FakeParihuelaDao : ParihuelaDao {
         private var seq = 0L
         private val data = linkedMapOf<Long, ParihuelaEntity>()
@@ -593,10 +700,14 @@ class ParihuelaRepositoryTest {
             data.values.firstOrNull { it.codigo == codigo }
 
         override fun observeByEstado(estado: EstadoParihuela): Flow<List<ParihuelaEntity>> =
-            flowOf(data.values.filter { it.estado == estado })
+            flowOf(
+                data.values
+                    .filter { it.estado == estado }
+                    .sortedByDescending { it.horaInicio.time }
+            )
 
         override fun observeAll(): Flow<List<ParihuelaEntity>> =
-            flowOf(data.values.toList())
+            flowOf(data.values.sortedByDescending { it.horaInicio.time })
     }
 
     private class FakeBitacoraDao : BitacoraDao {
@@ -608,6 +719,9 @@ class ParihuelaRepositoryTest {
             items.add(bitacora.copy(id = id))
             return id
         }
+
+        override suspend fun existeEvento(parihuelaId: Long, evento: String): Boolean =
+            items.any { it.parihuelaId == parihuelaId && it.evento == evento }
 
         override fun observeByParihuela(parihuelaId: Long): Flow<List<BitacoraEntity>> =
             flowOf(items.filter { it.parihuelaId == parihuelaId })

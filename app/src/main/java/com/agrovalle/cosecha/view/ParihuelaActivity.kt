@@ -104,6 +104,8 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvFaltantes.text = "Faltan 100 para 100 | 120 para 120 (0%)"
             binding.btnAbrirParihuela.visibility = View.VISIBLE
             binding.btnSelladoAnticipado.visibility = View.GONE
+            binding.btnRegistrarPesajeParihuela.isEnabled = true
+            binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
         } else {
             binding.tvCodigoParihuela.text = "Parihuela: ${abierta.codigo}"
             binding.tvDetalleParihuela.text = "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}"
@@ -113,7 +115,16 @@ class ParihuelaActivity : AppCompatActivity() {
             val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
             binding.tvConteoJabas.text = "$jabas / 120 jabas"
             binding.progressParihuela.progress = pct
-            binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
+            if (f120 < 3) {
+                binding.tvFaltantes.text =
+                    "Faltan $f120 para 120 ($pct%) — Menos de 3 jabas restantes: proceda a sellar la parihuela."
+                binding.btnRegistrarPesajeParihuela.isEnabled = false
+                binding.btnRegistrarPesajeParihuela.text = "Proceda a sellar la parihuela"
+            } else {
+                binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
+                binding.btnRegistrarPesajeParihuela.isEnabled = true
+                binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
+            }
             binding.btnAbrirParihuela.visibility = View.GONE
             binding.btnSelladoAnticipado.visibility = View.VISIBLE
         }
@@ -133,21 +144,33 @@ class ParihuelaActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 8)
         }
-        val etVariedad = EditText(this).apply { hint = "Variedad (ej. Biloxi)" }
-        val etCuartel = EditText(this).apply { hint = "Cuartel (ej. Cuartel 01)" }
+        val etVariedad = EditText(this).apply { hint = "Variedad (obligatorio)" }
+        val etCuartel = EditText(this).apply { hint = "Cuartel (obligatorio)" }
         layout.addView(etVariedad)
         layout.addView(etCuartel)
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Abrir nueva parihuela")
             .setView(layout)
-            .setPositiveButton("Abrir") { _, _ ->
-                val v = etVariedad.text.toString().ifBlank { "Biloxi" }
-                val c = etCuartel.text.toString().ifBlank { "Cuartel 01" }
-                viewModel.abrirNuevaParihuela(v, c)
-            }
+            .setPositiveButton("Abrir", null)
             .setNegativeButton("Cancelar", null)
-            .show()
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val v = etVariedad.text?.toString()?.trim().orEmpty()
+                val c = etCuartel.text?.toString()?.trim().orEmpty()
+                if (v.isEmpty() || c.isEmpty()) {
+                    if (v.isEmpty()) etVariedad.error = "La variedad es obligatoria"
+                    if (c.isEmpty()) etCuartel.error = "El cuartel es obligatorio"
+                    viewModel.abrirNuevaParihuela(v, c)
+                } else {
+                    viewModel.abrirNuevaParihuela(v, c)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun mostrarDialogoSelladoAnticipado() {
