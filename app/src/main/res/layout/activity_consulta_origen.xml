@@ -40,6 +40,14 @@
             android:layout_marginTop="10dp"
             android:text="Consultar origen" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEscanearQr"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Escanear QR con cámara" />
+
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardResultadoOrigen"
             android:layout_width="match_parent"
@@ -50,13 +58,28 @@
             app:cardCornerRadius="16dp"
             app:cardElevation="2dp">
 
-            <TextView
-                android:id="@+id/tvResultadoOrigen"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="16dp"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tvResultadoOrigen"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <ImageView
+                    android:id="@+id/ivQrParihuela"
+                    android:layout_width="200dp"
+                    android:layout_height="200dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="12dp"
+                    android:contentDescription="QR de la parihuela sellada"
+                    android:visibility="gone" />
+            </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 </ScrollView>
