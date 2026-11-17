@@ -90,6 +90,11 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 13. Reporte de Cierre de Turno - Ingresos Manuales (AGV-016 Escenario 2.0) -->
+        <activity
+            android:name=".view.CierreTurnoActivity"
+            android:exported="false" />
+
     </application>
 
 </manifest>
