@@ -46,12 +46,13 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
             ) { abierta, avance ->
                 abierta to avance
             }.collect { (abierta, avance) ->
-                if (abierta != null && abierta.id != ultimaParihuelaConAlertaId) {
+                val inicio = abierta?.horaInicio
+                if (abierta != null && inicio != null && abierta.id != ultimaParihuelaConAlertaId) {
                     ultimaParihuelaConAlertaId = abierta.id
                     TiempoEsperaWorker.programarAlertaExacta(
                         context = getApplication(),
                         parihuelaId = abierta.id,
-                        horaInicio = abierta.horaInicio
+                        horaInicio = inicio
                     )
                 }
                 _uiState.update {
@@ -79,11 +80,6 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 val nueva = repository.abrirNuevaParihuela(v, c)
-                TiempoEsperaWorker.programarAlertaExacta(
-                    context = getApplication(),
-                    parihuelaId = nueva.id,
-                    horaInicio = nueva.horaInicio
-                )
                 _uiState.update {
                     it.copy(
                         mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",

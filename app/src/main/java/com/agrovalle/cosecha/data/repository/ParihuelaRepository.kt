@@ -39,7 +39,8 @@ enum class EstadoTiempoEspera {
 data class EstadoTiempoParihuela(
     val parihuelaId: Long,
     val restanteMs: Long,
-    val estado: EstadoTiempoEspera
+    val estado: EstadoTiempoEspera,
+    val cronometroIniciado: Boolean = true
 )
 
 /**
@@ -51,7 +52,7 @@ data class OrigenParihuela(
     val cuartel: String,
     val conteoJabas: Int,
     val pisos: Int,
-    val horaInicio: Date,
+    val horaInicio: Date?,
     val horaSellado: Date?,
     val estado: EstadoParihuela,
     val motivoSelladoAnticipado: String?
@@ -123,7 +124,8 @@ data class ResultadoRegistroJabas(
     val selladaPorLimite: Boolean = false,
     val rechazadoPorMezcla: Boolean = false,
     val rechazadoPorCapacidad: Boolean = false,
-    val incidenciaGenerada: IncidenciaEntity? = null
+    val incidenciaGenerada: IncidenciaEntity? = null,
+    val cronometroIniciadoEnEstePesaje: Boolean = false
 )
 
 /**
@@ -144,7 +146,7 @@ class ParihuelaRepository(
         private val secuenciaCodigo = AtomicInteger(0)
 
         const val LIMITE_JABAS = 120
-        const val LIMITE_ESPERA_MS = 30L * 60L * 1000L
+        const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
@@ -207,7 +209,7 @@ class ParihuelaRepository(
             cuartel = cuartelLimpio,
             conteoJabas = 0,
             pisos = 0,
-            horaInicio = ahora
+            horaInicio = null
         )
         val id = parihuelaDao.insert(nueva)
         return nueva.copy(id = id)
@@ -301,15 +303,23 @@ class ParihuelaRepository(
             )
         }
 
+        val esPrimerPesaje = actual.horaInicio == null
+        val horaInicioEfectiva = actual.horaInicio ?: ahora
+        val actualConInicio = if (esPrimerPesaje) {
+            actual.copy(horaInicio = horaInicioEfectiva)
+        } else {
+            actual
+        }
+
         if (nuevoConteo == LIMITE_JABAS) {
-            val sellada = actual.copy(
+            val sellada = actualConInicio.copy(
                 conteoJabas = nuevoConteo,
                 estado = EstadoParihuela.SELLADA,
                 horaSellado = ahora
             )
             parihuelaDao.update(sellada)
 
-            registrarRetencionExcedidaSiCorresponde(actual, ahora)
+            registrarRetencionExcedidaSiCorresponde(actualConInicio, ahora)
 
             bitacoraDao.insert(
                 BitacoraEntity(
@@ -329,16 +339,18 @@ class ParihuelaRepository(
             return ResultadoRegistroJabas(
                 parihuela = sellada,
                 nuevaParihuela = siguiente,
-                selladaPorLimite = true
+                selladaPorLimite = true,
+                cronometroIniciadoEnEstePesaje = esPrimerPesaje
             )
         }
 
-        val actualizada = actual.copy(conteoJabas = nuevoConteo)
+        val actualizada = actualConInicio.copy(conteoJabas = nuevoConteo)
         parihuelaDao.update(actualizada)
         return ResultadoRegistroJabas(
             parihuela = actualizada,
             nuevaParihuela = null,
-            selladaPorLimite = false
+            selladaPorLimite = false,
+            cronometroIniciadoEnEstePesaje = esPrimerPesaje
         )
     }
 
@@ -424,12 +436,20 @@ class ParihuelaRepository(
 
     /**
      * Calcula el tiempo restante y el estado de espera a partir de [ParihuelaEntity.horaInicio].
+     * Si aún no tiene pesajes ([ParihuelaEntity.horaInicio] == null), el cronómetro no corre.
      */
     fun calcularTiempoEspera(
         parihuela: ParihuelaEntity,
         ahora: Date = Date()
     ): EstadoTiempoParihuela {
-        val transcurridoMs = (ahora.time - parihuela.horaInicio.time).coerceAtLeast(0L)
+        val inicio = parihuela.horaInicio
+            ?: return EstadoTiempoParihuela(
+                parihuelaId = parihuela.id,
+                restanteMs = LIMITE_ESPERA_MS,
+                estado = EstadoTiempoEspera.EN_ESPERA,
+                cronometroIniciado = false
+            )
+        val transcurridoMs = (ahora.time - inicio.time).coerceAtLeast(0L)
         val restanteSinAcotar = LIMITE_ESPERA_MS - transcurridoMs
         val estado = when {
             restanteSinAcotar <= 0L -> EstadoTiempoEspera.EXCEDIDA
@@ -439,7 +459,8 @@ class ParihuelaRepository(
         return EstadoTiempoParihuela(
             parihuelaId = parihuela.id,
             restanteMs = restanteSinAcotar.coerceAtLeast(0L),
-            estado = estado
+            estado = estado,
+            cronometroIniciado = true
         )
     }
 
@@ -634,6 +655,7 @@ class ParihuelaRepository(
         val porNotificar = mutableListOf<ParihuelaEntity>()
 
         for (parihuela in abiertas) {
+            if (parihuela.horaInicio == null) continue
             val tiempo = calcularTiempoEspera(parihuela, ahora)
             when (tiempo.estado) {
                 EstadoTiempoEspera.EN_ESPERA -> Unit

@@ -81,7 +81,7 @@ class ConsultaOrigenActivity : AppCompatActivity() {
                                 appendLine("Variedad: ${o.variedad}")
                                 appendLine("Cuartel: ${o.cuartel}")
                                 appendLine("Jabas: ${o.conteoJabas} | Pisos: ${o.pisos}")
-                                appendLine("Inicio: ${formatoFecha.format(o.horaInicio)}")
+                                appendLine("Inicio: ${o.horaInicio?.let { formatoFecha.format(it) } ?: "Sin iniciar (sin pesajes)"}")
                                 appendLine("Sellado: ${o.horaSellado?.let { formatoFecha.format(it) } ?: "Pendiente"}")
                                 if (!o.motivoSelladoAnticipado.isNullOrBlank()) {
                                     append("Motivo sellado anticipado: ${o.motivoSelladoAnticipado}")

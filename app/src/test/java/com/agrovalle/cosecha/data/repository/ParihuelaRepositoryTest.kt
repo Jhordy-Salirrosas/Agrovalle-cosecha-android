@@ -168,21 +168,37 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
-    fun `recien abierta el tiempo restante es el limite completo y estado EN_ESPERA`() = runBlocking {
-        val inicio = Date(1_700_000_000_000L)
-        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+    fun `sin pesajes no corre el tiempo ni se dispara alerta y al primer pesaje inicia cronometro de 45 min`() = runBlocking {
+        val horaApertura = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", horaApertura)
 
-        val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, inicio)!!
+        assertNull(parihuelaDao.getById(parihuela.id)!!.horaInicio)
+        val estadoSinPesaje = repository.obtenerEstadoTiempoParihuela(
+            parihuela.id,
+            Date(horaApertura.time + 60 * 60_000L)
+        )!!
+        assertFalse(estadoSinPesaje.cronometroIniciado)
+        assertEquals(45L * 60L * 1000L, estadoSinPesaje.restanteMs)
+        assertEquals(EstadoTiempoEspera.EN_ESPERA, estadoSinPesaje.estado)
+        assertTrue(repository.evaluarAlertasTiempo(Date(horaApertura.time + 60 * 60_000L)).isEmpty())
 
-        assertEquals(ParihuelaRepository.LIMITE_ESPERA_MS, estado.restanteMs)
-        assertEquals(EstadoTiempoEspera.EN_ESPERA, estado.estado)
+        val horaPrimerPesaje = Date(horaApertura.time + 15 * 60_000L)
+        val res = repository.registrarPesaje("Juan Perez", 10, "Biloxi", "Cuartel 01", horaPrimerPesaje)
+        assertTrue((res as ResultadoPesaje.Registrado).resultadoJabas.cronometroIniciadoEnEstePesaje)
+        assertEquals(horaPrimerPesaje, parihuelaDao.getById(parihuela.id)!!.horaInicio)
+
+        val estadoAlIniciar = repository.obtenerEstadoTiempoParihuela(parihuela.id, horaPrimerPesaje)!!
+        assertTrue(estadoAlIniciar.cronometroIniciado)
+        assertEquals(45L * 60L * 1000L, estadoAlIniciar.restanteMs)
+        assertEquals(EstadoTiempoEspera.EN_ESPERA, estadoAlIniciar.estado)
     }
 
     @Test
-    fun `a mitad del limite el calculo es exacto y estado EN_ESPERA`() = runBlocking {
+    fun `a mitad del limite desde el primer pesaje el calculo es exacto y estado EN_ESPERA`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
         val mitad = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS / 2)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01", inicio)
 
         val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, mitad)!!
 
@@ -191,12 +207,13 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
-    fun `con exactamente 5 minutos restantes el estado es POR_VENCER`() = runBlocking {
+    fun `con exactamente 5 minutos restantes desde el primer pesaje el estado es POR_VENCER`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
         val cincoMinAntes = Date(
             inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - ParihuelaRepository.UMBRAL_POR_VENCER_MS
         )
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01", inicio)
 
         val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, cincoMinAntes)!!
 
@@ -205,10 +222,11 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
-    fun `pasado el limite el estado es EXCEDIDA y restante es cero`() = runBlocking {
+    fun `pasados los 45 minutos desde el primer pesaje el estado es EXCEDIDA y restante es cero`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
         val pasado = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01", inicio)
 
         val estado = repository.obtenerEstadoTiempoParihuela(parihuela.id, pasado)!!
 
@@ -279,9 +297,10 @@ class ParihuelaRepositoryTest {
     @Test
     fun `consulta de origen por codigo existente devuelve todos los datos`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
+        val primerPesaje = Date(1_700_000_100_000L)
         val sellado = Date(1_700_000_300_000L)
         val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 18", inicio)
-        repository.registrarJabas(parihuela.id, 40, "Ventura", "Cuartel 18", Date(1_700_000_100_000L))
+        repository.registrarJabas(parihuela.id, 40, "Ventura", "Cuartel 18", primerPesaje)
         repository.sellarAnticipadamente(parihuela.id, "Fin de jornada", sellado)
 
         val resultado = repository.consultarOrigenPorCodigo(parihuela.codigo)
@@ -293,7 +312,7 @@ class ParihuelaRepositoryTest {
         assertEquals("Cuartel 18", origen.cuartel)
         assertEquals(40, origen.conteoJabas)
         assertEquals(0, origen.pisos)
-        assertEquals(inicio, origen.horaInicio)
+        assertEquals(primerPesaje, origen.horaInicio)
         assertEquals(sellado, origen.horaSellado)
         assertEquals(EstadoParihuela.SELLADA_ANTICIPADA, origen.estado)
         assertEquals("Fin de jornada", origen.motivoSelladoAnticipado)
@@ -381,7 +400,7 @@ class ParihuelaRepositoryTest {
                 estado = EstadoParihuela.ABIERTA,
                 variedad = "Ventura",
                 cuartel = "Cuartel 05",
-                horaInicio = Date(ahora.time - 28 * 60_000L)
+                horaInicio = Date(ahora.time - 42 * 60_000L)
             )
         )
         val mediaId = parihuelaDao.insert(
@@ -500,7 +519,8 @@ class ParihuelaRepositoryTest {
     @Test
     fun `evaluarAlertasTiempo no avisa en EN_ESPERA`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
-        repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01", inicio)
 
         val porNotificar = repository.evaluarAlertasTiempo(Date(inicio.time + 10 * 60_000L))
 
@@ -512,6 +532,7 @@ class ParihuelaRepositoryTest {
     fun `evaluarAlertasTiempo avisa una sola vez en POR_VENCER y no repite`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01", inicio)
         val enPorVencer = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - 3 * 60_000L)
 
         val primeraVez = repository.evaluarAlertasTiempo(enPorVencer)
@@ -531,6 +552,7 @@ class ParihuelaRepositoryTest {
     fun `evaluarAlertasTiempo marca RETENCION_EXCEDIDA y notifica una sola vez`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
         val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Ventura", "Cuartel 05", inicio)
         val excedida = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
 
         val primera = repository.evaluarAlertasTiempo(excedida)
@@ -547,18 +569,18 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
-    fun `calcularDemoraAlertaExactaMs programa a los 25 minutos para parihuela recien abierta`() {
+    fun `calcularDemoraAlertaExactaMs programa a los 40 minutos desde el primer pesaje`() {
         val inicio = Date(1_700_000_000_000L)
 
         val demora = ParihuelaRepository.calcularDemoraAlertaExactaMs(inicio, inicio)
 
-        assertEquals(25L * 60L * 1000L, demora)
+        assertEquals(40L * 60L * 1000L, demora)
     }
 
     @Test
     fun `calcularDemoraAlertaExactaMs devuelve cero si el momento ya paso`() {
         val inicio = Date(1_700_000_000_000L)
-        val pasado = Date(inicio.time + 26L * 60L * 1000L)
+        val pasado = Date(inicio.time + 41L * 60L * 1000L)
 
         val demora = ParihuelaRepository.calcularDemoraAlertaExactaMs(inicio, pasado)
 
@@ -672,6 +694,7 @@ class ParihuelaRepositoryTest {
         val inicio = Date(1_700_000_000_000L)
         val despuesDelLimite = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 120_000L)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, "Biloxi", "Cuartel 01", inicio)
 
         repository.sellarAnticipadamente(parihuela.id, "Cierre tardío", despuesDelLimite)
 
@@ -703,11 +726,19 @@ class ParihuelaRepositoryTest {
             flowOf(
                 data.values
                     .filter { it.estado == estado }
-                    .sortedByDescending { it.horaInicio.time }
+                    .sortedWith(
+                        compareByDescending<ParihuelaEntity> { it.horaInicio?.time ?: 0L }
+                            .thenByDescending { it.id }
+                    )
             )
 
         override fun observeAll(): Flow<List<ParihuelaEntity>> =
-            flowOf(data.values.sortedByDescending { it.horaInicio.time })
+            flowOf(
+                data.values.sortedWith(
+                    compareByDescending<ParihuelaEntity> { it.horaInicio?.time ?: 0L }
+                        .thenByDescending { it.id }
+                )
+            )
     }
 
     private class FakeBitacoraDao : BitacoraDao {
