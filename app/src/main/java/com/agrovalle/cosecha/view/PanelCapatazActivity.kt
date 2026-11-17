@@ -1,6 +1,8 @@
 package com.agrovalle.cosecha.view
 
+import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.LinearLayout
@@ -35,6 +37,7 @@ class PanelCapatazActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPanelCapatazBinding
     private val viewModel: PanelCapatazViewModel by viewModels()
     private val formatoHora = SimpleDateFormat("dd/MM HH:mm:ss", Locale.getDefault())
+    private val formatoSoloHora = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +58,8 @@ class PanelCapatazActivity : AppCompatActivity() {
         viewModel.refrescar()
     }
 
+    private fun formatearKg(kg: Double): String = String.format(Locale.US, "%.2f", kg)
+
     private fun renderizar(state: PanelCapatazUiState) {
         if (state.mensaje != null) {
             binding.tvMensajePanel.visibility = View.VISIBLE
@@ -71,7 +76,9 @@ class PanelCapatazActivity : AppCompatActivity() {
             appendLine("Retenidas por Calidad: ${resumen.totalRetenidasCalidad}")
             appendLine("Selladas: ${resumen.totalSelladas}")
             appendLine("Selladas anticipadas: ${resumen.totalSelladasAnticipadas}")
-            append("Total jabas: ${resumen.totalJabas}")
+            appendLine("Total jabas: ${resumen.totalJabas}")
+            appendLine("Total kilos netos: ${formatearKg(resumen.totalKilosNetos)} kg")
+            append("Jornaleros activos: ${resumen.totalJornalerosActivos}")
         }
 
         val porVariedad = if (resumen.jabasPorVariedad.isEmpty()) {
@@ -82,14 +89,24 @@ class PanelCapatazActivity : AppCompatActivity() {
         val porCuartel = if (resumen.jabasPorCuartel.isEmpty()) {
             "Sin datos"
         } else {
-            resumen.jabasPorCuartel.entries.joinToString(", ") { "${it.key}: ${it.value}" }
+            resumen.jabasPorCuartel.entries.joinToString(", ") { (cuartel, jabas) ->
+                val kg = resumen.kilosPorCuartel[cuartel] ?: 0.0
+                "$cuartel: $jabas jabas (${formatearKg(kg)} kg)"
+            }
         }
         binding.tvAgrupacionesPanel.text = "Variedad: $porVariedad\nCuartel: $porCuartel"
 
-        binding.tvRendimientoPanel.text = if (state.rendimientoPorJornalero.isEmpty()) {
+        binding.tvRendimientoPanel.text = if (resumen.rendimientoDetallado.isEmpty()) {
             "Sin pesajes registrados."
         } else {
-            state.rendimientoPorJornalero.entries.joinToString("\n") { "${it.key}: ${it.value} jabas" }
+            resumen.rendimientoDetallado.joinToString("\n") { r ->
+                val horaTxt = formatoSoloHora.format(r.horaPrimerPesaje)
+                val tasaTxt = r.tasaKgPorHora?.let { "${formatearKg(it)} kg/h" }
+                    ?: "Tiempo insuficiente"
+                val alertaTxt = if (r.bajoRendimiento) " [Bajo rendimiento]" else ""
+                "• ${r.jornalero}: ${formatearKg(r.totalKilos)} kg • ${r.totalJabas} jabas • " +
+                    "1er pesaje: $horaTxt • $tasaTxt$alertaTxt"
+            }
         }
 
         renderizarJornalerosPorCuartel(state)
@@ -156,39 +173,63 @@ class PanelCapatazActivity : AppCompatActivity() {
             binding.containerJornalerosCuartel.addView(tvVacio)
         } else {
             agrupados.forEach { (cuartel, jornaleros) ->
+                val kilosCuartel = jornaleros.sumOf { it.kilosNetos }
                 val tvCuartelHeader = TextView(this).apply {
-                    text = "$cuartel (${jornaleros.size})"
+                    text = "$cuartel (${jornaleros.size} activos • ${formatearKg(kilosCuartel)} kg)"
                     setTextColor(ContextCompat.getColor(context, R.color.verde_agricola))
                     textSize = 14f
                     setPadding(0, 12, 0, 4)
-                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTypeface(null, Typeface.BOLD)
                 }
                 binding.containerJornalerosCuartel.addView(tvCuartelHeader)
 
                 jornaleros.forEach { item ->
                     val row = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
-                        setPadding(8, 6, 8, 6)
-                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        setPadding(8, 8, 8, 8)
+                        gravity = Gravity.CENTER_VERTICAL
                     }
-                    val tvInfo = TextView(this).apply {
+                    val colInfo = LinearLayout(this).apply {
                         layoutParams = LinearLayout.LayoutParams(
                             0,
                             LinearLayout.LayoutParams.WRAP_CONTENT,
                             1f
                         )
-                        text = "${item.nombre} (${item.jabasAcumuladas} jabas)"
+                        orientation = LinearLayout.VERTICAL
+                    }
+                    val primerTxt = item.horaPrimerPesaje?.let {
+                        "1er pesaje: ${formatoSoloHora.format(it)}"
+                    } ?: "Sin pesajes"
+                    val tasaTxt = item.tasaKgPorHora?.let { "${formatearKg(it)} kg/h" }
+                        ?: if (item.horaPrimerPesaje == null) "-" else "Tiempo insuficiente"
+                    val tvInfo = TextView(this).apply {
+                        text = "${item.nombre}\n${formatearKg(item.kilosNetos)} kg • " +
+                            "${item.jabasAcumuladas} jabas • $primerTxt • $tasaTxt"
                         setTextColor(ContextCompat.getColor(context, R.color.text_primary))
-                        textSize = 14f
+                        textSize = 13f
                     }
-                    val btnReasignar = MaterialButton(this).apply {
-                        text = "Reasignar"
-                        setOnClickListener {
-                            mostrarDialogoReasignar(item, state.cuartelesDisponibles)
+                    colInfo.addView(tvInfo)
+
+                    if (item.bajoRendimiento) {
+                        val tvBajoRendimiento = TextView(this).apply {
+                            text = "Bajo rendimiento (< ${ParihuelaRepository.UMBRAL_BAJO_RENDIMIENTO_KG_HORA} kg/h)"
+                            setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
+                            textSize = 12f
+                            setTypeface(null, Typeface.BOLD)
                         }
+                        colInfo.addView(tvBajoRendimiento)
                     }
-                    row.addView(tvInfo)
-                    row.addView(btnReasignar)
+                    row.addView(colInfo)
+
+                    if (item.bajoRendimiento) {
+                        val btnReasignar = MaterialButton(this).apply {
+                            text = "Reasignar"
+                            setOnClickListener {
+                                mostrarDialogoReasignar(item, state.cuartelesDisponibles)
+                            }
+                        }
+                        row.addView(btnReasignar)
+                    }
                     binding.containerJornalerosCuartel.addView(row)
                 }
             }

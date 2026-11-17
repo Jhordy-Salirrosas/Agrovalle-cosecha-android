@@ -8,11 +8,13 @@ import com.agrovalle.cosecha.data.local.AgroValleDatabase
 import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
 import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.ResumenPanelCapataz
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class PanelCapatazUiState(
@@ -33,18 +35,17 @@ class PanelCapatazViewModel(application: Application) : AndroidViewModel(applica
         AgroValleDatabase.getInstance(application).crearParihuelaRepository()
     }
 
-    private val refreshTrigger = MutableStateFlow(0)
+    private val refreshTrigger = MutableStateFlow(0L)
     private val _uiState = MutableStateFlow(PanelCapatazUiState())
     val uiState: StateFlow<PanelCapatazUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             combine(
-                repository.observarResumenPanel(),
+                repository.observarResumenPanel(tickFlow = refreshTrigger),
                 repository.observarRendimientoPorJornalero(),
-                repository.observarReasignaciones(),
-                refreshTrigger
-            ) { resumen, rendimiento, reasignaciones, _ ->
+                repository.observarReasignaciones()
+            ) { resumen, rendimiento, reasignaciones ->
                 Triple(resumen, rendimiento, reasignaciones)
             }.collect { (resumen, rendimiento, reasignaciones) ->
                 val cuarteles = (
@@ -62,10 +63,18 @@ class PanelCapatazViewModel(application: Application) : AndroidViewModel(applica
                 }
             }
         }
+
+        // Actualiza periódicamente el cálculo de tasa en vivo (kg/h desde 1er pesaje)
+        viewModelScope.launch {
+            while (isActive) {
+                delay(30_000L)
+                refreshTrigger.update { it + 1L }
+            }
+        }
     }
 
     fun refrescar() {
-        refreshTrigger.update { it + 1 }
+        refreshTrigger.update { it + 1L }
     }
 
     fun reasignarJornalero(
@@ -82,7 +91,7 @@ class PanelCapatazViewModel(application: Application) : AndroidViewModel(applica
                     motivo = motivo,
                     cuartelOrigen = cuartelOrigen
                 )
-                refreshTrigger.update { it + 1 }
+                refreshTrigger.update { it + 1L }
                 _uiState.update {
                     it.copy(
                         mensaje = "${registrada.jornalero} reasignado de ${registrada.cuartelOrigen} a ${registrada.cuartelDestino} (${registrada.motivo}).",
