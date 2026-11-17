@@ -2,6 +2,7 @@ package com.agrovalle.cosecha.view
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.agrovalle.cosecha.R
@@ -18,6 +19,7 @@ class ConfirmacionActivity : AppCompatActivity() {
         binding = ActivityConfirmacionBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val pesajeId = intent.getLongExtra(RegistrarPesajeActivity.EXTRA_PESAJE_ID, 0L)
         val pesoNeto = intent.getDoubleExtra(RegistrarPesajeActivity.EXTRA_PESO_NETO, 8.00)
         val acumuladoDiario = intent.getDoubleExtra(RegistrarPesajeActivity.EXTRA_ACUMULADO_DIARIO, 45.50)
         val esTaraCalibrada = intent.getBooleanExtra(RegistrarPesajeActivity.EXTRA_ES_TARA_CALIBRADA, true)
@@ -26,7 +28,7 @@ class ConfirmacionActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             activarFeedbackSensorial(esTaraCalibrada)
         }
-        configurarNavegacion()
+        configurarNavegacion(pesajeId)
     }
 
     private fun configurarEstadoVisual(esTaraCalibrada: Boolean, pesoNeto: Double, acumuladoDiario: Double) {
@@ -55,7 +57,19 @@ class ConfirmacionActivity : AppCompatActivity() {
         FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = !esTaraCalibrada)
     }
 
-    private fun configurarNavegacion() {
+    private fun configurarNavegacion(pesajeId: Long) {
+        if (pesajeId > 0L) {
+            binding.btnIniciarReclamoConfirmacion.visibility = View.VISIBLE
+            binding.btnIniciarReclamoConfirmacion.setOnClickListener {
+                val intent = Intent(this, ReclamosPesoActivity::class.java).apply {
+                    putExtra(ReclamosPesoActivity.EXTRA_PESAJE_ID, pesajeId)
+                }
+                startActivity(intent)
+            }
+        } else {
+            binding.btnIniciarReclamoConfirmacion.visibility = View.GONE
+        }
+
         // Al presionar la X, se cierra esta pantalla y se vuelve al Menú Principal (no al pesaje)
         binding.btnCerrarX.setOnClickListener {
             val intent = Intent(this, MenuActivity::class.java).apply {

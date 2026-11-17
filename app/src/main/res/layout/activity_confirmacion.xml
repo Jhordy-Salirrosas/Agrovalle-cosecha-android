@@ -217,6 +217,22 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
+        <!-- Botón Iniciar Reclamo (AGV-015) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnIniciarReclamoConfirmacion"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="10dp"
+            android:text="Iniciar Reclamo de Peso (AGV-015)"
+            android:textColor="@color/verde_agricola"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:backgroundTint="@color/white"
+            app:cornerRadius="12dp"
+            app:strokeColor="@color/verde_agricola"
+            app:strokeWidth="1.5dp" />
+
         <!-- Botón Siguiente Jornalero -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSiguienteJornalero"

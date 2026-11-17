@@ -35,6 +35,10 @@ class PesajeViewModel(
     private val _error = MutableLiveData<String?>(null)
     val error: LiveData<String?> = _error
 
+    /** ID del último pesaje guardado, para navegar directo a reclamo desde Confirmación (AGV-015). */
+    var ultimoPesajeRegistradoId: Long? = null
+        private set
+
     /** Jornalero identificado por escaneo. Su id se guarda en SavedStateHandle. */
     var jornaleroId: Long
         get() = savedStateHandle[KEY_JORNALERO_ID] ?: 0L
@@ -113,7 +117,7 @@ class PesajeViewModel(
         val neto = CalculadoraPesaje.calcularPesoNeto(pesoBruto, cantidadJabas, tara)
         val porDefecto = _esTaraPorDefecto.value == true
 
-        DatosMemoria.registrarPesaje(
+        val guardado = DatosMemoria.registrarPesaje(
             Pesaje(
                 jornaleroId = jornalero.id,
                 cantidadJabas = cantidadJabas,
@@ -124,6 +128,7 @@ class PesajeViewModel(
                 esTaraPorDefecto = porDefecto
             )
         )
+        ultimoPesajeRegistradoId = guardado.id
 
         // El pesaje quedo guardado: se reinicia el formulario en curso.
         limpiarPesajeEnCurso()

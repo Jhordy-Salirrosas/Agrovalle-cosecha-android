@@ -2,11 +2,17 @@ package com.agrovalle.cosecha.data
 
 import com.agrovalle.cosecha.model.Asistencia
 import com.agrovalle.cosecha.model.CalibracionTara
+import com.agrovalle.cosecha.model.CredencialCapataz
+import com.agrovalle.cosecha.model.EstadoReclamoPeso
 import com.agrovalle.cosecha.model.Jornalero
 import com.agrovalle.cosecha.model.Pesaje
+import com.agrovalle.cosecha.model.ReclamoPeso
 import com.agrovalle.cosecha.model.RegistroIngresoManual
 import com.agrovalle.cosecha.model.ResumenCuadrillaCierre
 import com.agrovalle.cosecha.util.CalculadoraCierreTurno
+import com.agrovalle.cosecha.util.CalculadoraReclamoPeso
+import com.agrovalle.cosecha.util.Constantes
+import com.agrovalle.cosecha.util.FechaHoraUtil
 
 /**
  * Datos en MEMORIA de la aplicacion (Singleton de Kotlin) - Sprint 1.
@@ -53,6 +59,22 @@ object DatosMemoria {
      */
     val listaJornaleros: MutableList<Jornalero> = generarPadron()
 
+    /** Credenciales autorizadas de capataz para autorizar reclamos de peso > 20 g (AGV-015). */
+    val credencialesCapataz: List<CredencialCapataz> = listOf(
+        CredencialCapataz(
+            id = 1L,
+            nombre = "Carlos Mendez (Capataz)",
+            codigoQr = "QR_CAPATAZ_001",
+            cuadrillaCodigo = CODIGO_CUADRILLA
+        ),
+        CredencialCapataz(
+            id = 2L,
+            nombre = "Elena Rojas (Supervisora)",
+            codigoQr = "QR_CAPATAZ_002",
+            cuadrillaCodigo = CODIGO_CUADRILLA
+        )
+    )
+
     // ------------------------------------------------------------------------
     // Asignacion jornalero -> cuartel (AGV-002)
     // ------------------------------------------------------------------------
@@ -94,10 +116,14 @@ object DatosMemoria {
     /** Calibraciones de tara del turno (AGV-015). */
     val calibraciones: MutableList<CalibracionTara> = mutableListOf()
 
+    /** Bitácora de reclamos de peso y compensatorios (AGV-015 escenarios 2.0 y 3.0). */
+    val bitacoraReclamos: MutableList<ReclamoPeso> = mutableListOf()
+
     private var secuenciaAsistencia = 0L
     private var secuenciaIngresoManual = 0L
     private var secuenciaPesaje = 0L
     private var secuenciaCalibracion = 0L
+    private var secuenciaReclamo = 0L
 
     // ------------------------------------------------------------------------
     // Consultas sobre el padron
@@ -106,6 +132,13 @@ object DatosMemoria {
     /** Busca un jornalero por su codigo de fotocheck (AGV-001). */
     fun buscarJornaleroPorQr(codigoQr: String): Jornalero? =
         listaJornaleros.firstOrNull { it.codigoQr.equals(codigoQr.trim(), ignoreCase = true) }
+
+    /** Valida la credencial QR de un capataz autorizado (AGV-015 escenario 3.0). */
+    fun buscarCapatazPorQr(codigoQr: String): CredencialCapataz? {
+        val limpio = codigoQr.trim()
+        if (limpio.isEmpty()) return null
+        return credencialesCapataz.firstOrNull { it.codigoQr.equals(limpio, ignoreCase = true) }
+    }
 
     /** Busca un jornalero por su id (usado al navegar con EXTRA_JORNALERO_ID). */
     fun buscarJornaleroPorId(id: Long): Jornalero? =
@@ -229,6 +262,13 @@ object DatosMemoria {
         return guardado
     }
 
+    /** Pesajes originales registrados (excluye pesajes compensatorios, los más recientes primero). */
+    fun pesajesOriginales(): List<Pesaje> =
+        pesajes.filter { !it.esCompensatorio }.sortedByDescending { it.id }
+
+    /** Busca un pesaje por su ID. */
+    fun buscarPesajePorId(id: Long): Pesaje? = pesajes.firstOrNull { it.id == id }
+
     /** Pesajes de un jornalero. */
     fun pesajesDeJornalero(jornaleroId: Long): List<Pesaje> =
         pesajes.filter { it.jornaleroId == jornaleroId }
@@ -237,6 +277,131 @@ object DatosMemoria {
     fun acumuladoDiario(jornaleroId: Long, desde: Long, hasta: Long): Double =
         pesajes.filter { it.jornaleroId == jornaleroId && it.timestamp in desde..hasta }
             .sumOf { it.pesoNeto }
+
+    // ------------------------------------------------------------------------
+    // Reclamos de peso y compensatorios (AGV-015 escenarios 2.0 y 3.0)
+    // ------------------------------------------------------------------------
+
+    sealed interface ResultadoRegistroReclamo {
+        data class DentroDeTolerancia(
+            val reclamo: ReclamoPeso,
+            val pesajeOriginal: Pesaje
+        ) : ResultadoRegistroReclamo
+
+        data class CompensacionRegistrada(
+            val reclamo: ReclamoPeso,
+            val pesajeOriginal: Pesaje,
+            val pesajeCompensatorio: Pesaje
+        ) : ResultadoRegistroReclamo
+    }
+
+    /**
+     * Evalúa y registra un reclamo de peso sobre un pesaje original sin modificarlo ni borrarlo:
+     * - Diferencia <= 20 g: mantiene el original y registra el reclamo en bitácora.
+     * - Diferencia > 20 g: exige credencial QR de capataz válida, crea pesaje compensatorio
+     *   vinculado al original y registra tanto reclamo como compensatorio en bitácora.
+     */
+    fun registrarReclamoPeso(
+        pesajeOriginalId: Long,
+        nuevoPesoBrutoKg: Double,
+        taraPorJabaKg: Double,
+        codigoQrCapataz: String? = null,
+        fecha: String = FechaHoraUtil.hoy(),
+        hora: String = FechaHoraUtil.ahoraHora(),
+        timestamp: Long = FechaHoraUtil.timestampActual()
+    ): ResultadoRegistroReclamo {
+        val original = buscarPesajePorId(pesajeOriginalId)
+            ?: throw IllegalArgumentException("Pesaje original no encontrado: $pesajeOriginalId")
+        require(!original.esCompensatorio) {
+            "No se puede iniciar un reclamo sobre un pesaje compensatorio"
+        }
+
+        val jornaleroNombre = buscarJornaleroPorId(original.jornaleroId)?.nombreCompleto
+            ?: "Jornalero #${original.jornaleroId}"
+        val nuevoNetoKg = CalculadoraReclamoPeso.calcularPesoNetoPrecisionGramos(
+            pesoBrutoKg = nuevoPesoBrutoKg,
+            cantidadJabas = original.cantidadJabas,
+            taraPorJabaKg = taraPorJabaKg
+        )
+        val evaluacion = CalculadoraReclamoPeso.evaluarReclamo(
+            pesoOriginalNetoKg = original.pesoNeto,
+            pesoNuevoNetoKg = nuevoNetoKg
+        )
+        val taraAplicada = Math.round(taraPorJabaKg * original.cantidadJabas * 1000.0) / 1000.0
+
+        if (!evaluacion.excedeTolerancia) {
+            val reclamo = ReclamoPeso(
+                id = ++secuenciaReclamo,
+                fecha = fecha,
+                hora = hora,
+                timestamp = timestamp,
+                jornaleroId = original.jornaleroId,
+                jornaleroNombre = jornaleroNombre,
+                pesajeOriginalId = original.id,
+                pesoOriginalNetoKg = original.pesoNeto,
+                pesoBrutoReclamoKg = nuevoPesoBrutoKg,
+                taraAplicadaKg = taraAplicada,
+                pesoNuevoNetoKg = evaluacion.pesoNuevoNetoKg,
+                diferenciaKg = evaluacion.diferenciaKg,
+                diferenciaGramos = evaluacion.diferenciaGramos,
+                diferenciaAbsolutaGramos = evaluacion.diferenciaAbsolutaGramos,
+                excedeTolerancia = false,
+                estado = EstadoReclamoPeso.DENTRO_TOLERANCIA
+            )
+            bitacoraReclamos.add(reclamo)
+            return ResultadoRegistroReclamo.DentroDeTolerancia(reclamo, original)
+        }
+
+        val qrLimpio = codigoQrCapataz?.trim().orEmpty()
+        check(qrLimpio.isNotEmpty()) {
+            "La diferencia supera ${Constantes.TOLERANCIA_RECLAMO_GRAMOS.toInt()} g y exige autorización escaneando el QR del capataz"
+        }
+        val capataz = buscarCapatazPorQr(qrLimpio)
+            ?: throw IllegalArgumentException("Credencial QR no válida para autorización de capataz")
+
+        val compensatorio = registrarPesaje(
+            Pesaje(
+                jornaleroId = original.jornaleroId,
+                cantidadJabas = 0,
+                pesoBruto = evaluacion.diferenciaKg,
+                taraTotal = 0.0,
+                pesoNeto = evaluacion.diferenciaKg,
+                timestamp = timestamp,
+                esTaraPorDefecto = original.esTaraPorDefecto,
+                esCompensatorio = true,
+                pesajeOriginalId = original.id
+            )
+        )
+
+        val reclamo = ReclamoPeso(
+            id = ++secuenciaReclamo,
+            fecha = fecha,
+            hora = hora,
+            timestamp = timestamp,
+            jornaleroId = original.jornaleroId,
+            jornaleroNombre = jornaleroNombre,
+            pesajeOriginalId = original.id,
+            pesoOriginalNetoKg = original.pesoNeto,
+            pesoBrutoReclamoKg = nuevoPesoBrutoKg,
+            taraAplicadaKg = taraAplicada,
+            pesoNuevoNetoKg = evaluacion.pesoNuevoNetoKg,
+            diferenciaKg = evaluacion.diferenciaKg,
+            diferenciaGramos = evaluacion.diferenciaGramos,
+            diferenciaAbsolutaGramos = evaluacion.diferenciaAbsolutaGramos,
+            excedeTolerancia = true,
+            estado = EstadoReclamoPeso.COMPENSADO,
+            pesajeCompensatorioId = compensatorio.id,
+            pesoCompensatorioKg = compensatorio.pesoNeto,
+            capatazAutorizador = capataz.nombre,
+            codigoQrCapataz = capataz.codigoQr
+        )
+        bitacoraReclamos.add(reclamo)
+        return ResultadoRegistroReclamo.CompensacionRegistrada(reclamo, original, compensatorio)
+    }
+
+    /** Bitácora de reclamos de peso ordenada del más reciente al más antiguo. */
+    fun obtenerBitacoraReclamos(): List<ReclamoPeso> =
+        bitacoraReclamos.sortedByDescending { it.id }
 
     // ------------------------------------------------------------------------
     // Calibracion de tara (AGV-015)
@@ -263,10 +428,12 @@ object DatosMemoria {
         bitacoraIngresosManuales.clear()
         pesajes.clear()
         calibraciones.clear()
+        bitacoraReclamos.clear()
         secuenciaAsistencia = 0L
         secuenciaIngresoManual = 0L
         secuenciaPesaje = 0L
         secuenciaCalibracion = 0L
+        secuenciaReclamo = 0L
     }
 
     private fun generarPadron(): MutableList<Jornalero> = MutableList(TOTAL_PADRON) { i ->
