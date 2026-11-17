@@ -63,9 +63,18 @@ class MenuActivity : AppCompatActivity() {
             startActivity(Intent(this, CalibrarTaraActivity::class.java))
         }
 
-        // Sprint 2: Gestión de Parihuela
+        // Sprint 2: Gestión de Parihuela, Incidencias, Panel y Consulta de Origen
         binding.btnParihuela.setOnClickListener {
             startActivity(Intent(this, ParihuelaActivity::class.java))
+        }
+        binding.btnIncidencias.setOnClickListener {
+            startActivity(Intent(this, IncidenciasActivity::class.java))
+        }
+        binding.btnPanelCapataz.setOnClickListener {
+            startActivity(Intent(this, PanelCapatazActivity::class.java))
+        }
+        binding.btnConsultaOrigen.setOnClickListener {
+            startActivity(Intent(this, ConsultaOrigenActivity::class.java))
         }
 
         // Cerrar turno -> vuelve a Login limpiando la pila

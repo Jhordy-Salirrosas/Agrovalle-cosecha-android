@@ -72,6 +72,22 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 10. Incidencias de Mezcla (Sprint 2) -->
+        <activity
+            android:name=".view.IncidenciasActivity"
+            android:exported="false" />
+
+        <!-- 11. Panel del Capataz (Sprint 2) -->
+        <activity
+            android:name=".view.PanelCapatazActivity"
+            android:exported="false" />
+
+        <!-- 12. Consulta de Origen por Código (Sprint 2) -->
+        <activity
+            android:name=".view.ConsultaOrigenActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
     </application>
 
 </manifest>

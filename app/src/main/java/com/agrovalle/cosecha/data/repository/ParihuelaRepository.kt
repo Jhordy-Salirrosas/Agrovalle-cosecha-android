@@ -310,6 +310,12 @@ class ParihuelaRepository(
         incidenciaDao.observeByParihuela(parihuelaId)
 
     /**
+     * Expone todas las incidencias registradas ordenadas por fecha descendente.
+     */
+    fun observarTodasLasIncidencias(): Flow<List<IncidenciaEntity>> =
+        incidenciaDao.observeAll()
+
+    /**
      * Calcula el tiempo restante y el estado de espera a partir de [ParihuelaEntity.horaInicio].
      */
     fun calcularTiempoEspera(
