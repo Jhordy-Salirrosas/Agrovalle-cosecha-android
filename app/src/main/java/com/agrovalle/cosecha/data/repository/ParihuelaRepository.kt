@@ -3,11 +3,14 @@ package com.agrovalle.cosecha.data.repository
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
 import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
+import com.agrovalle.cosecha.data.local.dao.PesajeDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
+import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
@@ -75,6 +78,30 @@ data class ResumenPanelCapataz(
 )
 
 /**
+ * Avance observable de la parihuela abierta.
+ */
+data class AvanceParihuela(
+    val parihuelaId: Long,
+    val jabasActuales: Int,
+    val faltanPara100: Int,
+    val faltanPara120: Int,
+    val porcentajeHacia120: Int
+)
+
+/**
+ * Resultado de registrar un pesaje sobre la parihuela abierta.
+ */
+sealed interface ResultadoPesaje {
+    data class Registrado(
+        val pesaje: PesajeEntity,
+        val resultadoJabas: ResultadoRegistroJabas
+    ) : ResultadoPesaje
+
+    data class RechazadoPorMezcla(val incidencia: IncidenciaEntity) : ResultadoPesaje
+    data object SinParihuelaAbierta : ResultadoPesaje
+}
+
+/**
  * Resultado de registrar jabas en una parihuela.
  */
 data class ResultadoRegistroJabas(
@@ -91,7 +118,8 @@ data class ResultadoRegistroJabas(
 class ParihuelaRepository(
     private val parihuelaDao: ParihuelaDao,
     private val bitacoraDao: BitacoraDao,
-    private val incidenciaDao: IncidenciaDao
+    private val incidenciaDao: IncidenciaDao,
+    private val pesajeDao: PesajeDao
 ) {
 
     companion object {
@@ -370,6 +398,110 @@ class ParihuelaRepository(
                 abiertasPorUrgencia = abiertas
             )
         }
+    }
+
+    /**
+     * Registra un pesaje asignándolo a la parihuela ABIERTA actual, aplicando
+     * validación anti-mezcla y sellado automático al llegar a 120 jabas.
+     */
+    suspend fun registrarPesaje(
+        jornalero: String,
+        cantidadJabas: Int,
+        variedad: String,
+        cuartel: String,
+        ahora: Date = Date()
+    ): ResultadoPesaje {
+        require(jornalero.isNotBlank()) { "El jornalero es obligatorio" }
+        val abierta = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
+            ?: return ResultadoPesaje.SinParihuelaAbierta
+
+        val resultadoJabas = registrarJabas(
+            parihuelaId = abierta.id,
+            cantidad = cantidadJabas,
+            variedad = variedad,
+            cuartel = cuartel,
+            ahora = ahora
+        )
+
+        if (resultadoJabas.rechazadoPorMezcla) {
+            return ResultadoPesaje.RechazadoPorMezcla(resultadoJabas.incidenciaGenerada!!)
+        }
+
+        val pesaje = PesajeEntity(
+            parihuelaId = abierta.id,
+            jornalero = jornalero.trim(),
+            cantidadJabas = cantidadJabas,
+            fechaHora = ahora
+        )
+        val pesajeId = pesajeDao.insert(pesaje)
+        return ResultadoPesaje.Registrado(
+            pesaje = pesaje.copy(id = pesajeId),
+            resultadoJabas = resultadoJabas
+        )
+    }
+
+    /**
+     * Expone el avance observable de la parihuela abierta actual.
+     */
+    fun observarAvanceParihuelaAbierta(): Flow<AvanceParihuela?> {
+        return parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).map { abiertas ->
+            val actual = abiertas.firstOrNull() ?: return@map null
+            val jabas = actual.conteoJabas
+            AvanceParihuela(
+                parihuelaId = actual.id,
+                jabasActuales = jabas,
+                faltanPara100 = (100 - jabas).coerceAtLeast(0),
+                faltanPara120 = (LIMITE_JABAS - jabas).coerceAtLeast(0),
+                porcentajeHacia120 = ((jabas * 100) / LIMITE_JABAS).coerceIn(0, 100)
+            )
+        }
+    }
+
+    /**
+     * Expone el rendimiento (total de jabas) agrupado por jornalero.
+     */
+    fun observarRendimientoPorJornalero(): Flow<Map<String, Int>> {
+        return pesajeDao.observeAll().map { pesajes ->
+            pesajes
+                .groupBy { it.jornalero }
+                .mapValues { (_, lista) -> lista.sumOf { it.cantidadJabas } }
+        }
+    }
+
+    /**
+     * Reasigna el jornalero de un pesaje si su parihuela sigue ABIERTA.
+     * Si la parihuela ya está sellada, registra INTENTO_EDICION en bitácora y rechaza.
+     */
+    suspend fun reasignarJornalero(
+        pesajeId: Long,
+        nuevoJornalero: String,
+        ahora: Date = Date()
+    ): PesajeEntity {
+        val jornaleroLimpio = nuevoJornalero.trim()
+        require(jornaleroLimpio.isNotEmpty()) { "El nuevo jornalero es obligatorio" }
+
+        val pesaje = pesajeDao.getById(pesajeId)
+            ?: throw IllegalArgumentException("Pesaje no encontrado: $pesajeId")
+        val parihuela = parihuelaDao.getById(pesaje.parihuelaId)
+            ?: throw IllegalArgumentException("Parihuela no encontrada: ${pesaje.parihuelaId}")
+
+        if (parihuela.estado != EstadoParihuela.ABIERTA) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = parihuela.id,
+                    evento = EVENTO_INTENTO_EDICION,
+                    detalle = "Intento de reasignar pesaje #$pesajeId sobre parihuela en estado ${parihuela.estado}",
+                    fechaHora = ahora
+                )
+            )
+            throw IllegalStateException(
+                "No se puede reasignar un pesaje de una parihuela sellada (${parihuela.codigo})"
+            )
+        }
+
+        val actualizado = pesaje.copy(jornalero = jornaleroLimpio)
+        pesajeDao.update(actualizado)
+        return actualizado
     }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {

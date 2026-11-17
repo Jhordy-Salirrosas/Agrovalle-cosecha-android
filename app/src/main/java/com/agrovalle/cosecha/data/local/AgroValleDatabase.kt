@@ -9,9 +9,11 @@ import com.agrovalle.cosecha.data.local.converter.Converters
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
 import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
+import com.agrovalle.cosecha.data.local.dao.PesajeDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
+import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 
 /**
  * Base de datos Room de AgroValle Cosecha (Sprint 2).
@@ -20,9 +22,10 @@ import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
     entities = [
         ParihuelaEntity::class,
         IncidenciaEntity::class,
-        BitacoraEntity::class
+        BitacoraEntity::class,
+        PesajeEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -31,6 +34,7 @@ abstract class AgroValleDatabase : RoomDatabase() {
     abstract fun parihuelaDao(): ParihuelaDao
     abstract fun incidenciaDao(): IncidenciaDao
     abstract fun bitacoraDao(): BitacoraDao
+    abstract fun pesajeDao(): PesajeDao
 
     companion object {
         private const val DATABASE_NAME = "agrovalle_cosecha.db"
