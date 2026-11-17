@@ -311,6 +311,74 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
+    fun `resumen del panel con base vacia sale en cero sin errores`() = runBlocking {
+        val resumen = repository.observarResumenPanel().first()
+
+        assertEquals(0, resumen.totalAbiertas)
+        assertEquals(0, resumen.totalSelladas)
+        assertEquals(0, resumen.totalSelladasAnticipadas)
+        assertEquals(0, resumen.totalJabas)
+        assertTrue(resumen.jabasPorVariedad.isEmpty())
+        assertTrue(resumen.jabasPorCuartel.isEmpty())
+        assertTrue(resumen.abiertasPorUrgencia.isEmpty())
+    }
+
+    @Test
+    fun `resumen del panel calcula totales y agrupa jabas por variedad y cuartel`() = runBlocking {
+        val base = 1_700_000_000_000L
+        val p1 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(base))
+        repository.registrarJabas(p1.id, 120, "Biloxi", "Cuartel 01", Date(base + 10_000L))
+        // Al llegar a 120 se abre p2 automaticamente con Biloxi / Cuartel 01 y 0 jabas
+        val p3 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", Date(base + 20_000L))
+        repository.registrarJabas(p3.id, 30, "Ventura", "Cuartel 05", Date(base + 30_000L))
+        repository.sellarAnticipadamente(p3.id, "Fin de turno", Date(base + 40_000L))
+
+        val p4 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 12", Date(base + 50_000L))
+        repository.registrarJabas(p4.id, 15, "Biloxi", "Cuartel 12", Date(base + 60_000L))
+
+        val resumen = repository.observarResumenPanel { Date(base + 100_000L) }.first()
+
+        assertEquals(2, resumen.totalAbiertas)
+        assertEquals(1, resumen.totalSelladas)
+        assertEquals(1, resumen.totalSelladasAnticipadas)
+        assertEquals(165, resumen.totalJabas)
+        assertEquals(mapOf("Biloxi" to 135, "Ventura" to 30), resumen.jabasPorVariedad)
+        assertEquals(
+            mapOf("Cuartel 01" to 120, "Cuartel 05" to 30, "Cuartel 12" to 15),
+            resumen.jabasPorCuartel
+        )
+    }
+
+    @Test
+    fun `resumen del panel ordena parihuelas abiertas de menor a mayor tiempo restante`() = runBlocking {
+        val ahora = Date(1_700_000_000_000L)
+        val reciente = repository.abrirNuevaParihuela(
+            "Biloxi",
+            "Cuartel 01",
+            Date(ahora.time - 2 * 60_000L)
+        )
+        val urgente = repository.abrirNuevaParihuela(
+            "Ventura",
+            "Cuartel 05",
+            Date(ahora.time - 28 * 60_000L)
+        )
+        val media = repository.abrirNuevaParihuela(
+            "Biloxi",
+            "Cuartel 12",
+            Date(ahora.time - 15 * 60_000L)
+        )
+
+        val resumen = repository.observarResumenPanel { ahora }.first()
+
+        assertEquals(
+            listOf(urgente.id, media.id, reciente.id),
+            resumen.abiertasPorUrgencia.map { it.parihuela.id }
+        )
+        assertEquals(EstadoTiempoEspera.POR_VENCER, resumen.abiertasPorUrgencia.first().tiempoEspera.estado)
+        assertEquals(EstadoTiempoEspera.EN_ESPERA, resumen.abiertasPorUrgencia.last().tiempoEspera.estado)
+    }
+
+    @Test
     fun `cuartel distinto se rechaza, mantiene conteo y registra incidencia MEZCLA_CUARTEL`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
         repository.registrarJabas(parihuela.id, 5, "Biloxi", "Cuartel 01")

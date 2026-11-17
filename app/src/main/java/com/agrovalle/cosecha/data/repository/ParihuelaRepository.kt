@@ -8,6 +8,7 @@ import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -51,6 +52,27 @@ sealed interface ConsultaOrigenParihuela {
     data class Encontrado(val origen: OrigenParihuela) : ConsultaOrigenParihuela
     data object NoEncontrado : ConsultaOrigenParihuela
 }
+
+/**
+ * Parihuela abierta con su estado de tiempo de espera calculado.
+ */
+data class ParihuelaAbiertaResumen(
+    val parihuela: ParihuelaEntity,
+    val tiempoEspera: EstadoTiempoParihuela
+)
+
+/**
+ * Resumen observable para el panel del capataz.
+ */
+data class ResumenPanelCapataz(
+    val totalAbiertas: Int = 0,
+    val totalSelladas: Int = 0,
+    val totalSelladasAnticipadas: Int = 0,
+    val totalJabas: Int = 0,
+    val jabasPorVariedad: Map<String, Int> = emptyMap(),
+    val jabasPorCuartel: Map<String, Int> = emptyMap(),
+    val abiertasPorUrgencia: List<ParihuelaAbiertaResumen> = emptyList()
+)
 
 /**
  * Resultado de registrar jabas en una parihuela.
@@ -312,6 +334,42 @@ class ParihuelaRepository(
                 motivoSelladoAnticipado = parihuela.motivoSelladoAnticipado
             )
         )
+    }
+
+    /**
+     * Expone el resumen observable para el panel del capataz, calculado desde la BD.
+     */
+    fun observarResumenPanel(
+        ahoraProvider: () -> Date = { Date() }
+    ): Flow<ResumenPanelCapataz> {
+        return parihuelaDao.observeAll().map { parihuelas ->
+            val ahora = ahoraProvider()
+            val abiertas = parihuelas
+                .filter { it.estado == EstadoParihuela.ABIERTA }
+                .map { parihuela ->
+                    ParihuelaAbiertaResumen(
+                        parihuela = parihuela,
+                        tiempoEspera = calcularTiempoEspera(parihuela, ahora)
+                    )
+                }
+                .sortedBy { it.tiempoEspera.restanteMs }
+
+            ResumenPanelCapataz(
+                totalAbiertas = abiertas.size,
+                totalSelladas = parihuelas.count { it.estado == EstadoParihuela.SELLADA },
+                totalSelladasAnticipadas = parihuelas.count {
+                    it.estado == EstadoParihuela.SELLADA_ANTICIPADA
+                },
+                totalJabas = parihuelas.sumOf { it.conteoJabas },
+                jabasPorVariedad = parihuelas
+                    .groupBy { it.variedad }
+                    .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
+                jabasPorCuartel = parihuelas
+                    .groupBy { it.cuartel }
+                    .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
+                abiertasPorUrgencia = abiertas
+            )
+        }
     }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {
