@@ -17,13 +17,7 @@ import kotlinx.coroutines.launch
 class IncidenciasViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: ParihuelaRepository by lazy {
-        val db = AgroValleDatabase.getInstance(application)
-        ParihuelaRepository(
-            parihuelaDao = db.parihuelaDao(),
-            bitacoraDao = db.bitacoraDao(),
-            incidenciaDao = db.incidenciaDao(),
-            pesajeDao = db.pesajeDao()
-        )
+        AgroValleDatabase.getInstance(application).crearParihuelaRepository()
     }
 
     private val _incidencias = MutableStateFlow<List<IncidenciaEntity>>(emptyList())

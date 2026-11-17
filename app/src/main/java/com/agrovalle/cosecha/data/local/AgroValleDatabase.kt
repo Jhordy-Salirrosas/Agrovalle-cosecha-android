@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
+import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.agrovalle.cosecha.data.local.converter.Converters
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
@@ -16,6 +17,8 @@ import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
+import com.agrovalle.cosecha.data.repository.ParihuelaRepository
+import com.agrovalle.cosecha.data.repository.TransaccionRunner
 
 /**
  * Base de datos Room de AgroValle Cosecha (Sprint 2).
@@ -37,6 +40,20 @@ abstract class AgroValleDatabase : RoomDatabase() {
     abstract fun incidenciaDao(): IncidenciaDao
     abstract fun bitacoraDao(): BitacoraDao
     abstract fun pesajeDao(): PesajeDao
+
+    fun crearParihuelaRepository(): ParihuelaRepository {
+        return ParihuelaRepository(
+            parihuelaDao = parihuelaDao(),
+            bitacoraDao = bitacoraDao(),
+            incidenciaDao = incidenciaDao(),
+            pesajeDao = pesajeDao(),
+            transaccionRunner = object : TransaccionRunner {
+                override suspend fun <T> ejecutar(bloque: suspend () -> T): T {
+                    return withTransaction { bloque() }
+                }
+            }
+        )
+    }
 
     companion object {
         private const val DATABASE_NAME = "agrovalle_cosecha.db"

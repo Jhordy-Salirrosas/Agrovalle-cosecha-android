@@ -26,12 +26,7 @@ class TiempoEsperaWorker(
 
     override suspend fun doWork(): Result {
         val db = AgroValleDatabase.getInstance(applicationContext)
-        val repository = ParihuelaRepository(
-            parihuelaDao = db.parihuelaDao(),
-            bitacoraDao = db.bitacoraDao(),
-            incidenciaDao = db.incidenciaDao(),
-            pesajeDao = db.pesajeDao()
-        )
+        val repository = db.crearParihuelaRepository()
         val porNotificar = repository.evaluarAlertasTiempo()
         porNotificar.forEach { parihuela ->
             NotificacionTiempoUtil.mostrarAlertaPorVencer(applicationContext, parihuela)
