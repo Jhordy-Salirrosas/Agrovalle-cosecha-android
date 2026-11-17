@@ -525,6 +525,25 @@ class ParihuelaRepositoryTest {
     }
 
     @Test
+    fun `calcularDemoraAlertaExactaMs programa a los 25 minutos para parihuela recien abierta`() {
+        val inicio = Date(1_700_000_000_000L)
+
+        val demora = ParihuelaRepository.calcularDemoraAlertaExactaMs(inicio, inicio)
+
+        assertEquals(25L * 60L * 1000L, demora)
+    }
+
+    @Test
+    fun `calcularDemoraAlertaExactaMs devuelve cero si el momento ya paso`() {
+        val inicio = Date(1_700_000_000_000L)
+        val pasado = Date(inicio.time + 26L * 60L * 1000L)
+
+        val demora = ParihuelaRepository.calcularDemoraAlertaExactaMs(inicio, pasado)
+
+        assertEquals(0L, demora)
+    }
+
+    @Test
     fun `cuartel distinto se rechaza, mantiene conteo y registra incidencia MEZCLA_CUARTEL`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", Date(1_700_000_000_000L))
         repository.registrarJabas(parihuela.id, 5, "Biloxi", "Cuartel 01")

@@ -133,6 +133,16 @@ class ParihuelaRepository(
         const val EVENTO_RETENCION_EXCEDIDA = "RETENCION_EXCEDIDA"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
         const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
+
+        /**
+         * Calcula la demora en milisegundos hasta el momento exacto en que la parihuela
+         * entrará en POR_VENCER (horaInicio + LIMITE_ESPERA_MS - UMBRAL_POR_VENCER_MS).
+         * Si el momento ya pasó, devuelve 0L para ejecución inmediata.
+         */
+        fun calcularDemoraAlertaExactaMs(horaInicio: Date, ahora: Date = Date()): Long {
+            val momentoAlerta = horaInicio.time + LIMITE_ESPERA_MS - UMBRAL_POR_VENCER_MS
+            return (momentoAlerta - ahora.time).coerceAtLeast(0L)
+        }
     }
 
     private val secuenciaCodigo = AtomicInteger(0)

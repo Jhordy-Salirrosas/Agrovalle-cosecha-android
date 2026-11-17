@@ -9,6 +9,7 @@ import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.repository.AvanceParihuela
 import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.ResultadoPesaje
+import com.agrovalle.cosecha.worker.TiempoEsperaWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +65,11 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     fun abrirNuevaParihuela(variedad: String, cuartel: String) {
         viewModelScope.launch {
             val nueva = repository.abrirNuevaParihuela(variedad.trim(), cuartel.trim())
+            TiempoEsperaWorker.programarAlertaExacta(
+                context = getApplication(),
+                parihuelaId = nueva.id,
+                horaInicio = nueva.horaInicio
+            )
             _uiState.update {
                 it.copy(
                     mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",
