@@ -29,9 +29,7 @@ class TiempoEsperaWorker(
         val db = AgroValleDatabase.getInstance(applicationContext)
         val repository = db.crearParihuelaRepository()
         val ahora = Date()
-        val porNotificar = repository.evaluarAlertasTiempo(ahora)
-        porNotificar.forEach { parihuela ->
-            val estado = repository.calcularTiempoEspera(parihuela, ahora).estado
+        repository.evaluarAlertasTiempo(ahora) { parihuela, estado ->
             if (estado == EstadoTiempoEspera.EXCEDIDA) {
                 NotificacionTiempoUtil.mostrarAlertaRetencionExcedida(applicationContext, parihuela)
             } else {
