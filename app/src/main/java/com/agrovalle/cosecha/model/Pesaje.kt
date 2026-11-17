@@ -10,5 +10,7 @@ data class Pesaje(
     val taraTotal: Double,
     val pesoNeto: Double,
     val timestamp: Long = System.currentTimeMillis(),
-    val esTaraPorDefecto: Boolean = false
+    val esTaraPorDefecto: Boolean = false,
+    val esCompensatorio: Boolean = false,
+    val pesajeOriginalId: Long? = null
 ) : Serializable

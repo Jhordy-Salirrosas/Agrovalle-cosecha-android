@@ -275,6 +275,23 @@
                 app:strokeColor="@color/verde_agricola"
                 app:strokeWidth="2dp" />
 
+            <!-- Botón Reclamos de Peso y Bitácora (AGV-015 Escenarios 2.0 y 3.0) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnReclamosPeso"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="14dp"
+                android:gravity="center_vertical|start"
+                android:paddingStart="24dp"
+                android:text="Reclamos de Peso (AGV-015)"
+                android:textColor="@color/verde_agricola"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/white"
+                app:cornerRadius="16dp"
+                app:strokeColor="@color/verde_agricola"
+                app:strokeWidth="2dp" />
+
         </LinearLayout>
     </ScrollView>
 

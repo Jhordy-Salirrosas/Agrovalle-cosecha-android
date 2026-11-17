@@ -79,6 +79,9 @@ class MenuActivity : AppCompatActivity() {
         binding.btnCierreIngresosManuales.setOnClickListener {
             startActivity(Intent(this, CierreTurnoActivity::class.java))
         }
+        binding.btnReclamosPeso.setOnClickListener {
+            startActivity(Intent(this, ReclamosPesoActivity::class.java))
+        }
 
         // Cerrar turno -> vuelve a Login limpiando la pila
         binding.btnCerrarTurno.setOnClickListener {

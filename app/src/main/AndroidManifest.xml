@@ -95,6 +95,12 @@
             android:name=".view.CierreTurnoActivity"
             android:exported="false" />
 
+        <!-- 14. Reclamos de Peso y Bitácora (AGV-015 Escenarios 2.0 y 3.0) -->
+        <activity
+            android:name=".view.ReclamosPesoActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
     </application>
 
 </manifest>
