@@ -36,6 +36,7 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _uiState = MutableStateFlow(ParihuelaUiState())
     val uiState: StateFlow<ParihuelaUiState> = _uiState.asStateFlow()
+    private var ultimaParihuelaConAlertaId: Long? = null
 
     init {
         viewModelScope.launch {
@@ -45,6 +46,14 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
             ) { abierta, avance ->
                 abierta to avance
             }.collect { (abierta, avance) ->
+                if (abierta != null && abierta.id != ultimaParihuelaConAlertaId) {
+                    ultimaParihuelaConAlertaId = abierta.id
+                    TiempoEsperaWorker.programarAlertaExacta(
+                        context = getApplication(),
+                        parihuelaId = abierta.id,
+                        horaInicio = abierta.horaInicio
+                    )
+                }
                 _uiState.update {
                     it.copy(
                         parihuelaAbierta = abierta,

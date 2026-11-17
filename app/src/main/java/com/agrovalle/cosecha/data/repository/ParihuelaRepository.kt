@@ -309,6 +309,8 @@ class ParihuelaRepository(
             )
             parihuelaDao.update(sellada)
 
+            registrarRetencionExcedidaSiCorresponde(actual, ahora)
+
             bitacoraDao.insert(
                 BitacoraEntity(
                     parihuelaId = sellada.id,
@@ -375,6 +377,8 @@ class ParihuelaRepository(
         )
         parihuelaDao.update(sellada)
 
+        registrarRetencionExcedidaSiCorresponde(actual, ahora)
+
         bitacoraDao.insert(
             BitacoraEntity(
                 parihuelaId = sellada.id,
@@ -385,6 +389,25 @@ class ParihuelaRepository(
         )
 
         return@enTransaccionAtomica sellada
+    }
+
+    private suspend fun registrarRetencionExcedidaSiCorresponde(
+        parihuela: ParihuelaEntity,
+        ahora: Date
+    ) {
+        val tiempo = calcularTiempoEspera(parihuela, ahora)
+        if (tiempo.estado == EstadoTiempoEspera.EXCEDIDA &&
+            !bitacoraDao.existeEvento(parihuela.id, EVENTO_RETENCION_EXCEDIDA)
+        ) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = parihuela.id,
+                    evento = EVENTO_RETENCION_EXCEDIDA,
+                    detalle = "Retención de tiempo excedida para parihuela ${parihuela.codigo}",
+                    fechaHora = ahora
+                )
+            )
+        }
     }
 
     /**
@@ -640,6 +663,7 @@ class ParihuelaRepository(
                                 fechaHora = ahora
                             )
                         )
+                        porNotificar.add(parihuela)
                     }
                 }
             }
