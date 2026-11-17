@@ -144,21 +144,33 @@ class ParihuelaActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 8)
         }
-        val etVariedad = EditText(this).apply { hint = "Variedad (ej. Biloxi)" }
-        val etCuartel = EditText(this).apply { hint = "Cuartel (ej. Cuartel 01)" }
+        val etVariedad = EditText(this).apply { hint = "Variedad (obligatorio)" }
+        val etCuartel = EditText(this).apply { hint = "Cuartel (obligatorio)" }
         layout.addView(etVariedad)
         layout.addView(etCuartel)
 
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Abrir nueva parihuela")
             .setView(layout)
-            .setPositiveButton("Abrir") { _, _ ->
-                val v = etVariedad.text.toString().ifBlank { "Biloxi" }
-                val c = etCuartel.text.toString().ifBlank { "Cuartel 01" }
-                viewModel.abrirNuevaParihuela(v, c)
-            }
+            .setPositiveButton("Abrir", null)
             .setNegativeButton("Cancelar", null)
-            .show()
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val v = etVariedad.text?.toString()?.trim().orEmpty()
+                val c = etCuartel.text?.toString()?.trim().orEmpty()
+                if (v.isEmpty() || c.isEmpty()) {
+                    if (v.isEmpty()) etVariedad.error = "La variedad es obligatoria"
+                    if (c.isEmpty()) etCuartel.error = "El cuartel es obligatorio"
+                    viewModel.abrirNuevaParihuela(v, c)
+                } else {
+                    viewModel.abrirNuevaParihuela(v, c)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun mostrarDialogoSelladoAnticipado() {

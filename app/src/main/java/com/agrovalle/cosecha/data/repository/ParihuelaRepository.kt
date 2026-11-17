@@ -154,18 +154,30 @@ class ParihuelaRepository(
 
     /**
      * Abre una nueva parihuela generando un código único.
+     * Garantiza que solo exista una parihuela ABIERTA a la vez.
      */
     suspend fun abrirNuevaParihuela(
         variedad: String,
         cuartel: String,
         ahora: Date = Date()
     ): ParihuelaEntity {
+        val variedadLimpia = variedad.trim()
+        val cuartelLimpio = cuartel.trim()
+        require(variedadLimpia.isNotEmpty() && cuartelLimpio.isNotEmpty()) {
+            "La variedad y el cuartel son obligatorios para abrir una parihuela"
+        }
+
+        val abiertaExistente = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
+        check(abiertaExistente == null) {
+            "Ya existe una parihuela abierta (${abiertaExistente?.codigo})"
+        }
+
         val codigo = generarCodigoUnico(ahora)
         val nueva = ParihuelaEntity(
             codigo = codigo,
             estado = EstadoParihuela.ABIERTA,
-            variedad = variedad,
-            cuartel = cuartel,
+            variedad = variedadLimpia,
+            cuartel = cuartelLimpio,
             conteoJabas = 0,
             pisos = 0,
             horaInicio = ahora
@@ -173,6 +185,12 @@ class ParihuelaRepository(
         val id = parihuelaDao.insert(nueva)
         return nueva.copy(id = id)
     }
+
+    /**
+     * Expone la parihuela abierta actual desde el repositorio.
+     */
+    fun observarParihuelaAbierta(): Flow<ParihuelaEntity?> =
+        parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).map { it.firstOrNull() }
 
     /**
      * Incrementa el conteo de jabas de una parihuela abierta validando que no exista

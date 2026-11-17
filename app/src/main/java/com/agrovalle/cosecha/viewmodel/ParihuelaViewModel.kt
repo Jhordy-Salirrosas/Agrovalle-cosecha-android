@@ -44,13 +44,12 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     val uiState: StateFlow<ParihuelaUiState> = _uiState.asStateFlow()
 
     init {
-        val db = AgroValleDatabase.getInstance(application)
         viewModelScope.launch {
             combine(
-                db.parihuelaDao().observeByEstado(EstadoParihuela.ABIERTA),
+                repository.observarParihuelaAbierta(),
                 repository.observarAvanceParihuelaAbierta()
-            ) { abiertas, avance ->
-                abiertas.firstOrNull() to avance
+            ) { abierta, avance ->
+                abierta to avance
             }.collect { (abierta, avance) ->
                 _uiState.update {
                     it.copy(
@@ -63,18 +62,38 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun abrirNuevaParihuela(variedad: String, cuartel: String) {
-        viewModelScope.launch {
-            val nueva = repository.abrirNuevaParihuela(variedad.trim(), cuartel.trim())
-            TiempoEsperaWorker.programarAlertaExacta(
-                context = getApplication(),
-                parihuelaId = nueva.id,
-                horaInicio = nueva.horaInicio
-            )
+        val v = variedad.trim()
+        val c = cuartel.trim()
+        if (v.isEmpty() || c.isEmpty()) {
             _uiState.update {
                 it.copy(
-                    mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",
-                    esError = false
+                    mensaje = "Debe ingresar variedad y cuartel para abrir la parihuela.",
+                    esError = true
                 )
+            }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val nueva = repository.abrirNuevaParihuela(v, c)
+                TiempoEsperaWorker.programarAlertaExacta(
+                    context = getApplication(),
+                    parihuelaId = nueva.id,
+                    horaInicio = nueva.horaInicio
+                )
+                _uiState.update {
+                    it.copy(
+                        mensaje = "Parihuela ${nueva.codigo} abierta (${nueva.variedad} - ${nueva.cuartel})",
+                        esError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        mensaje = e.message ?: "No se pudo abrir la parihuela",
+                        esError = true
+                    )
+                }
             }
         }
     }
