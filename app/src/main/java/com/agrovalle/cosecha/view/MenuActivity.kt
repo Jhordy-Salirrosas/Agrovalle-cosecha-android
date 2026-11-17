@@ -57,6 +57,25 @@ class MenuActivity : AppCompatActivity() {
         binding.btnRegistrarPesaje.setOnClickListener {
             startActivity(Intent(this, RegistrarPesajeActivity::class.java))
         }
+        // AGV-015: acceso directo a la calibracion de tara (se habia perdido
+        // en la refactorizacion; antes solo se llegaba por el flujo de pesaje).
+        binding.btnCalibrarTara.setOnClickListener {
+            startActivity(Intent(this, CalibrarTaraActivity::class.java))
+        }
+
+        // Sprint 2: Gestión de Parihuela, Incidencias, Panel y Consulta de Origen
+        binding.btnParihuela.setOnClickListener {
+            startActivity(Intent(this, ParihuelaActivity::class.java))
+        }
+        binding.btnIncidencias.setOnClickListener {
+            startActivity(Intent(this, IncidenciasActivity::class.java))
+        }
+        binding.btnPanelCapataz.setOnClickListener {
+            startActivity(Intent(this, PanelCapatazActivity::class.java))
+        }
+        binding.btnConsultaOrigen.setOnClickListener {
+            startActivity(Intent(this, ConsultaOrigenActivity::class.java))
+        }
 
         // Cerrar turno -> vuelve a Login limpiando la pila
         binding.btnCerrarTurno.setOnClickListener {

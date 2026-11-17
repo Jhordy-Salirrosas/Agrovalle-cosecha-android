@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Permiso para el lector real de QR / Code 128 (ZXing) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Permiso de notificaciones en Android 13+ (Sprint 2) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -65,6 +67,28 @@
         <activity
             android:name=".view.ConfirmacionActivity"
             android:exported="false" />
+
+        <!-- 9. Gestión de Parihuela (Sprint 2) -->
+        <activity
+            android:name=".view.ParihuelaActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 10. Incidencias de Mezcla (Sprint 2) -->
+        <activity
+            android:name=".view.IncidenciasActivity"
+            android:exported="false" />
+
+        <!-- 11. Panel del Capataz (Sprint 2) -->
+        <activity
+            android:name=".view.PanelCapatazActivity"
+            android:exported="false" />
+
+        <!-- 12. Consulta de Origen por Código (Sprint 2) -->
+        <activity
+            android:name=".view.ConsultaOrigenActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
     </application>
 

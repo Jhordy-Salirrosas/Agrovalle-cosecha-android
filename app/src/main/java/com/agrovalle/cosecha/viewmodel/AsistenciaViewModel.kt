@@ -57,6 +57,17 @@ class AsistenciaViewModel(
             savedStateHandle[KEY_DIGITOS] = value
         }
 
+    /**
+     * Jornalero encontrado en la busqueda por DNI (AGV-016).
+     * [Jornalero] es `Serializable`, asi que SavedStateHandle lo puede persistir
+     * y el resultado sobrevive a la rotacion sin `onSaveInstanceState`.
+     */
+    var jornaleroEncontrado: Jornalero?
+        get() = savedStateHandle[KEY_JORNALERO_ENCONTRADO]
+        set(value) {
+            savedStateHandle[KEY_JORNALERO_ENCONTRADO] = value
+        }
+
     /** Metodo usado en el ultimo registro: QR_SCAN o DNI_MANUAL. */
     var ultimoMetodo: String
         get() = savedStateHandle[KEY_METODO] ?: METODO_QR
@@ -167,6 +178,7 @@ class AsistenciaViewModel(
     fun limpiar() {
         ultimoCodigoEscaneado = null
         jornaleroRegistradoId = 0L
+        jornaleroEncontrado = null
         _coincidencias.value = emptyList()
     }
 
@@ -180,5 +192,6 @@ class AsistenciaViewModel(
         private const val KEY_DIGITOS = "key_ultimos_digitos"
         private const val KEY_METODO = "key_ultimo_metodo"
         private const val KEY_JORNALERO_ID = "key_jornalero_registrado_id"
+        private const val KEY_JORNALERO_ENCONTRADO = "key_jornalero_encontrado"
     }
 }

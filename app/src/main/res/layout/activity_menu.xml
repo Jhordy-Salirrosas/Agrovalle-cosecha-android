@@ -176,7 +176,87 @@
                     android:textStyle="bold"
                     app:backgroundTint="@color/verde_agricola"
                     app:cornerRadius="16dp" />
+
+                <!-- Botón Calibrar Tara (AGV-015) -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCalibrarTara"
+                    android:layout_width="match_parent"
+                    android:layout_height="72dp"
+                    android:layout_marginBottom="14dp"
+                    android:gravity="center_vertical|start"
+                    android:paddingStart="24dp"
+                    android:text="@string/calibrar_tara"
+                    android:textColor="@color/white"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/verde_agricola"
+                    app:cornerRadius="16dp"
+                    app:icon="@drawable/ic_scale"
+                    app:iconGravity="textStart"
+                    app:iconPadding="16dp"
+                    app:iconSize="28dp"
+                    app:iconTint="@color/white" />
             </LinearLayout>
+
+            <!-- Botón Gestión de Parihuela (Sprint 2) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnParihuela"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="14dp"
+                android:gravity="center_vertical|start"
+                android:paddingStart="24dp"
+                android:text="Gestión de Parihuela"
+                android:textColor="@color/white"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/verde_agricola"
+                app:cornerRadius="16dp" />
+
+            <!-- Botón Incidencias (Sprint 2) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnIncidencias"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="14dp"
+                android:gravity="center_vertical|start"
+                android:paddingStart="24dp"
+                android:text="Incidencias de Mezcla"
+                android:textColor="@color/white"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/verde_agricola"
+                app:cornerRadius="16dp" />
+
+            <!-- Botón Panel del Capataz (Sprint 2) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPanelCapataz"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="14dp"
+                android:gravity="center_vertical|start"
+                android:paddingStart="24dp"
+                android:text="Panel del Capataz"
+                android:textColor="@color/white"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/verde_agricola"
+                app:cornerRadius="16dp" />
+
+            <!-- Botón Consulta de Origen (Sprint 2) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnConsultaOrigen"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginBottom="14dp"
+                android:gravity="center_vertical|start"
+                android:paddingStart="24dp"
+                android:text="Consulta de Origen"
+                android:textColor="@color/white"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/verde_agricola"
+                app:cornerRadius="16dp" />
 
         </LinearLayout>
     </ScrollView>

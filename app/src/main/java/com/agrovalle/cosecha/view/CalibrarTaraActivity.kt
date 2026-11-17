@@ -29,22 +29,12 @@ class CalibrarTaraActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCalibrarTaraBinding
     private val viewModel: CalibracionTaraViewModel by viewModels()
 
-    private var pesoActualMuestra: Double = Constantes.TARA_POR_DEFECTO
     private lateinit var vistasPasos: List<TextView>
-
-    companion object {
-        private const val KEY_PESO_MUESTRA = "key_peso_muestra"
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCalibrarTaraBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        if (savedInstanceState != null) {
-            pesoActualMuestra =
-                savedInstanceState.getDouble(KEY_PESO_MUESTRA, Constantes.TARA_POR_DEFECTO)
-        }
 
         vistasPasos = listOf(
             binding.tvPaso1,
@@ -59,11 +49,6 @@ class CalibrarTaraActivity : AppCompatActivity() {
         viewModel.cargarTaraVigente()
         actualizarDisplayPesoMuestra()
         actualizarUiPasoActual(viewModel.pesosMuestra.value?.size ?: 0)
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putDouble(KEY_PESO_MUESTRA, pesoActualMuestra)
     }
 
     private fun observarEstado() {
@@ -82,20 +67,20 @@ class CalibrarTaraActivity : AppCompatActivity() {
         binding.btnVolverTara.setOnClickListener { finish() }
 
         binding.btnMasPeso.setOnClickListener {
-            pesoActualMuestra = redondear3(pesoActualMuestra + 0.005)
+            viewModel.pesoActualMuestra = redondear3(viewModel.pesoActualMuestra + 0.005)
             actualizarDisplayPesoMuestra()
         }
 
         binding.btnMenosPeso.setOnClickListener {
-            if (pesoActualMuestra > 0.100) {
-                pesoActualMuestra = redondear3(pesoActualMuestra - 0.005)
+            if (viewModel.pesoActualMuestra > 0.100) {
+                viewModel.pesoActualMuestra = redondear3(viewModel.pesoActualMuestra - 0.005)
                 actualizarDisplayPesoMuestra()
             }
         }
 
         binding.btnRegistrarPesoJaba.setOnClickListener {
             FeedbackUtil.vibrarExito(this)
-            viewModel.registrarPesoMuestra(pesoActualMuestra)
+            viewModel.registrarPesoMuestra(viewModel.pesoActualMuestra)
         }
 
         // AGV-015: guarda la tara del turno en memoria
@@ -117,7 +102,8 @@ class CalibrarTaraActivity : AppCompatActivity() {
     }
 
     private fun actualizarDisplayPesoMuestra() {
-        binding.tvPesoMuestra.text = String.format(Locale.US, "%.3f kg", pesoActualMuestra)
+        binding.tvPesoMuestra.text =
+            String.format(Locale.US, "%.3f kg", viewModel.pesoActualMuestra)
     }
 
     private fun actualizarUiPasoActual(totalRegistradas: Int) {

@@ -50,6 +50,16 @@ class CalibracionTaraViewModel(
             savedStateHandle[KEY_MUESTRAS] = ArrayList(value)
         }
 
+    /**
+     * Peso de la muestra que se esta ajustando con +/- antes de registrarla.
+     * Vive en SavedStateHandle (no en la Activity) para sobrevivir a la rotacion.
+     */
+    var pesoActualMuestra: Double
+        get() = savedStateHandle[KEY_PESO_MUESTRA] ?: Constantes.TARA_POR_DEFECTO
+        set(value) {
+            savedStateHandle[KEY_PESO_MUESTRA] = value
+        }
+
     init {
         // Al recrear la Activity (rotacion) se restaura lo ya muestreado.
         val restauradas = pesos
@@ -92,6 +102,7 @@ class CalibracionTaraViewModel(
 
     fun reiniciar() {
         pesos = emptyList()
+        pesoActualMuestra = Constantes.TARA_POR_DEFECTO
         _pesosMuestra.value = emptyList()
         _pasoActual.value = 0
         _calibracionValida.value = false
@@ -162,5 +173,6 @@ class CalibracionTaraViewModel(
 
     companion object {
         private const val KEY_MUESTRAS = "key_calibracion_muestras"
+        private const val KEY_PESO_MUESTRA = "key_peso_muestra_actual"
     }
 }
