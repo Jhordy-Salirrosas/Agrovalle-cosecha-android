@@ -66,6 +66,12 @@
             android:name=".view.ConfirmacionActivity"
             android:exported="false" />
 
+        <!-- 9. Gestión de Parihuela (Sprint 2) -->
+        <activity
+            android:name=".view.ParihuelaActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
     </application>
 
 </manifest>
