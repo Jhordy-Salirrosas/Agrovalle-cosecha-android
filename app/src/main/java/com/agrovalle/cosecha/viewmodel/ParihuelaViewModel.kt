@@ -113,6 +113,15 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                     }
 
+                    is ResultadoPesaje.RechazadoPorCapacidad -> {
+                        _uiState.update {
+                            it.copy(
+                                mensaje = "Registro rechazado por capacidad: solo faltan ${res.jabasFaltantes} jabas para llegar a ${ParihuelaRepository.LIMITE_JABAS}.",
+                                esError = true
+                            )
+                        }
+                    }
+
                     is ResultadoPesaje.Registrado -> {
                         val msg = if (res.resultadoJabas.selladaPorLimite) {
                             val nueva = res.resultadoJabas.nuevaParihuela?.codigo ?: ""

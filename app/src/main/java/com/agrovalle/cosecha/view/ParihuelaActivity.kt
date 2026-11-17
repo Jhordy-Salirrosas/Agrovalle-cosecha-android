@@ -104,6 +104,8 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvFaltantes.text = "Faltan 100 para 100 | 120 para 120 (0%)"
             binding.btnAbrirParihuela.visibility = View.VISIBLE
             binding.btnSelladoAnticipado.visibility = View.GONE
+            binding.btnRegistrarPesajeParihuela.isEnabled = true
+            binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
         } else {
             binding.tvCodigoParihuela.text = "Parihuela: ${abierta.codigo}"
             binding.tvDetalleParihuela.text = "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}"
@@ -113,7 +115,16 @@ class ParihuelaActivity : AppCompatActivity() {
             val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
             binding.tvConteoJabas.text = "$jabas / 120 jabas"
             binding.progressParihuela.progress = pct
-            binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
+            if (f120 < 3) {
+                binding.tvFaltantes.text =
+                    "Faltan $f120 para 120 ($pct%) — Menos de 3 jabas restantes: proceda a sellar la parihuela."
+                binding.btnRegistrarPesajeParihuela.isEnabled = false
+                binding.btnRegistrarPesajeParihuela.text = "Proceda a sellar la parihuela"
+            } else {
+                binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
+                binding.btnRegistrarPesajeParihuela.isEnabled = true
+                binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
+            }
             binding.btnAbrirParihuela.visibility = View.GONE
             binding.btnSelladoAnticipado.visibility = View.VISIBLE
         }

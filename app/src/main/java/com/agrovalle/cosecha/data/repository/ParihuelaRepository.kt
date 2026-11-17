@@ -98,6 +98,10 @@ sealed interface ResultadoPesaje {
     ) : ResultadoPesaje
 
     data class RechazadoPorMezcla(val incidencia: IncidenciaEntity) : ResultadoPesaje
+    data class RechazadoPorCapacidad(
+        val parihuela: ParihuelaEntity,
+        val jabasFaltantes: Int
+    ) : ResultadoPesaje
     data object SinParihuelaAbierta : ResultadoPesaje
 }
 
@@ -109,6 +113,7 @@ data class ResultadoRegistroJabas(
     val nuevaParihuela: ParihuelaEntity? = null,
     val selladaPorLimite: Boolean = false,
     val rechazadoPorMezcla: Boolean = false,
+    val rechazadoPorCapacidad: Boolean = false,
     val incidenciaGenerada: IncidenciaEntity? = null
 )
 
@@ -202,17 +207,22 @@ class ParihuelaRepository(
             )
         }
 
+        val variedadLimpia = variedad.trim()
+        val cuartelLimpio = cuartel.trim()
+        require(variedadLimpia.isNotEmpty()) { "La variedad del pesaje es obligatoria" }
+        require(cuartelLimpio.isNotEmpty()) { "El cuartel del pesaje es obligatorio" }
+
         val tipoMezcla = when {
-            !variedad.equals(actual.variedad, ignoreCase = true) -> TIPO_MEZCLA_VARIEDAD
-            !cuartel.equals(actual.cuartel, ignoreCase = true) -> TIPO_MEZCLA_CUARTEL
+            !variedadLimpia.equals(actual.variedad.trim(), ignoreCase = true) -> TIPO_MEZCLA_VARIEDAD
+            !cuartelLimpio.equals(actual.cuartel.trim(), ignoreCase = true) -> TIPO_MEZCLA_CUARTEL
             else -> null
         }
 
         if (tipoMezcla != null) {
             val detalle = if (tipoMezcla == TIPO_MEZCLA_VARIEDAD) {
-                "Variedad entrante '$variedad' difiere de '${actual.variedad}'"
+                "Variedad entrante '$variedadLimpia' difiere de '${actual.variedad}'"
             } else {
-                "Cuartel entrante '$cuartel' difiere de '${actual.cuartel}'"
+                "Cuartel entrante '$cuartelLimpio' difiere de '${actual.cuartel}'"
             }
             val incidencia = IncidenciaEntity(
                 parihuelaId = actual.id,
@@ -229,7 +239,14 @@ class ParihuelaRepository(
         }
 
         val nuevoConteo = actual.conteoJabas + cantidad
-        if (nuevoConteo >= LIMITE_JABAS) {
+        if (nuevoConteo > LIMITE_JABAS) {
+            return ResultadoRegistroJabas(
+                parihuela = actual,
+                rechazadoPorCapacidad = true
+            )
+        }
+
+        if (nuevoConteo == LIMITE_JABAS) {
             val sellada = actual.copy(
                 conteoJabas = nuevoConteo,
                 estado = EstadoParihuela.SELLADA,
@@ -443,6 +460,14 @@ class ParihuelaRepository(
 
         if (resultadoJabas.rechazadoPorMezcla) {
             return ResultadoPesaje.RechazadoPorMezcla(resultadoJabas.incidenciaGenerada!!)
+        }
+
+        if (resultadoJabas.rechazadoPorCapacidad) {
+            val faltantes = (LIMITE_JABAS - abierta.conteoJabas).coerceAtLeast(0)
+            return ResultadoPesaje.RechazadoPorCapacidad(
+                parihuela = abierta,
+                jabasFaltantes = faltantes
+            )
         }
 
         val pesaje = PesajeEntity(
