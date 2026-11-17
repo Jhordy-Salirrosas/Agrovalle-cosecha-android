@@ -107,7 +107,12 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.btnRegistrarPesajeParihuela.isEnabled = true
             binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
         } else {
-            binding.tvCodigoParihuela.text = "Parihuela: ${abierta.codigo}"
+            val retenida = abierta.estado == com.agrovalle.cosecha.data.local.entity.EstadoParihuela.RETENIDA_CALIDAD
+            binding.tvCodigoParihuela.text = if (retenida) {
+                "Parihuela: ${abierta.codigo} [RETENIDA POR CALIDAD]"
+            } else {
+                "Parihuela: ${abierta.codigo}"
+            }
             binding.tvDetalleParihuela.text = "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}"
             val jabas = avance?.jabasActuales ?: abierta.conteoJabas
             val f100 = avance?.faltanPara100 ?: (100 - jabas).coerceAtLeast(0)
@@ -115,15 +120,26 @@ class ParihuelaActivity : AppCompatActivity() {
             val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
             binding.tvConteoJabas.text = "$jabas / 120 jabas"
             binding.progressParihuela.progress = pct
-            if (f120 < 3) {
+            if (retenida) {
+                binding.tvFaltantes.text =
+                    "Parihuela retenida por calidad — libérela desde Incidencias antes de continuar o sellar."
+                binding.btnRegistrarPesajeParihuela.isEnabled = false
+                binding.btnRegistrarPesajeParihuela.text = "Retenida por calidad"
+                binding.btnSelladoAnticipado.isEnabled = false
+                binding.btnSelladoAnticipado.text = "Sellado bloqueado (Retenida por Calidad)"
+            } else if (f120 < 3) {
                 binding.tvFaltantes.text =
                     "Faltan $f120 para 120 ($pct%) — Menos de 3 jabas restantes: proceda a sellar la parihuela."
                 binding.btnRegistrarPesajeParihuela.isEnabled = false
                 binding.btnRegistrarPesajeParihuela.text = "Proceda a sellar la parihuela"
+                binding.btnSelladoAnticipado.isEnabled = true
+                binding.btnSelladoAnticipado.text = "Sellado anticipado"
             } else {
                 binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
                 binding.btnRegistrarPesajeParihuela.isEnabled = true
                 binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
+                binding.btnSelladoAnticipado.isEnabled = true
+                binding.btnSelladoAnticipado.text = "Sellado anticipado"
             }
             binding.btnAbrirParihuela.visibility = View.GONE
             binding.btnSelladoAnticipado.visibility = View.VISIBLE

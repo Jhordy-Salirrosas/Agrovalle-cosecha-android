@@ -15,6 +15,27 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/tvContadorPendientes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Pendientes: 0"
+        android:textColor="@color/text_primary"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvMensajeIncidencias"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@color/surface"
+        android:padding="10dp"
+        android:textColor="@color/text_primary"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/tvSinIncidencias"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -22,6 +43,14 @@
         android:text="No hay incidencias registradas."
         android:textColor="@color/text_secondary"
         android:textSize="14sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/containerRetenidasCalidad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="vertical"
         android:visibility="gone" />
 
     <ScrollView

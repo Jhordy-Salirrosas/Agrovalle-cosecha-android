@@ -1,6 +1,7 @@
 package com.agrovalle.cosecha.data.local.converter
 
 import androidx.room.TypeConverter
+import com.agrovalle.cosecha.data.local.entity.EstadoIncidencia
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import java.util.Date
 
@@ -21,4 +22,11 @@ class Converters {
 
     @TypeConverter
     fun estadoParihuelaToString(estado: EstadoParihuela?): String? = estado?.name
+
+    @TypeConverter
+    fun fromEstadoIncidencia(value: String?): EstadoIncidencia? =
+        value?.let { EstadoIncidencia.valueOf(it) }
+
+    @TypeConverter
+    fun estadoIncidenciaToString(estado: EstadoIncidencia?): String? = estado?.name
 }

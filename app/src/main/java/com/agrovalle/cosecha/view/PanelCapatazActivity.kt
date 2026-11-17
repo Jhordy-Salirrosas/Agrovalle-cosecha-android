@@ -41,6 +41,7 @@ class PanelCapatazActivity : AppCompatActivity() {
         val resumen = state.resumen
         binding.tvTotalesPanel.text = buildString {
             appendLine("Abiertas: ${resumen.totalAbiertas}")
+            appendLine("Retenidas por Calidad: ${resumen.totalRetenidasCalidad}")
             appendLine("Selladas: ${resumen.totalSelladas}")
             appendLine("Selladas anticipadas: ${resumen.totalSelladasAnticipadas}")
             append("Total jabas: ${resumen.totalJabas}")
@@ -65,7 +66,18 @@ class PanelCapatazActivity : AppCompatActivity() {
         }
 
         binding.containerAbiertasUrgencia.removeAllViews()
-        if (resumen.abiertasPorUrgencia.isEmpty()) {
+        resumen.retenidasCalidad.forEach { retenida ->
+            val tvRetenida = TextView(this).apply {
+                text = "${retenida.codigo} • ${retenida.variedad} (${retenida.cuartel})\n" +
+                    "Jabas: ${retenida.conteoJabas}/120 • Estado: RETENIDA POR CALIDAD (No se puede sellar)"
+                setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
+                textSize = 14f
+                setPadding(24, 18, 24, 18)
+                setBackgroundColor(ContextCompat.getColor(context, R.color.surface))
+            }
+            binding.containerAbiertasUrgencia.addView(tvRetenida)
+        }
+        if (resumen.abiertasPorUrgencia.isEmpty() && resumen.retenidasCalidad.isEmpty()) {
             val tv = TextView(this).apply {
                 text = "No hay parihuelas abiertas."
                 setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
@@ -79,9 +91,15 @@ class PanelCapatazActivity : AppCompatActivity() {
                 val esUrgente = estadoTiempo == EstadoTiempoEspera.POR_VENCER ||
                     estadoTiempo == EstadoTiempoEspera.EXCEDIDA
 
+                val restanteTxt = if (item.tiempoEspera.cronometroIniciado) {
+                    "Restante: $minutosRestantes min"
+                } else {
+                    "Cronómetro: sin iniciar ($minutosRestantes min al 1er pesaje)"
+                }
+
                 val tv = TextView(this).apply {
                     text = "${item.parihuela.codigo} • ${item.parihuela.variedad} (${item.parihuela.cuartel})\n" +
-                        "Jabas: ${item.parihuela.conteoJabas}/120 • Restante: $minutosRestantes min • Estado: $estadoTiempo"
+                        "Jabas: ${item.parihuela.conteoJabas}/120 • $restanteTxt • Estado: $estadoTiempo"
                     setTextColor(
                         ContextCompat.getColor(
                             context,

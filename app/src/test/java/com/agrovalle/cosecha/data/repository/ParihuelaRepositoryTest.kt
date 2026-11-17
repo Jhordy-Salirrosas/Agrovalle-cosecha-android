@@ -5,6 +5,7 @@ import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
 import com.agrovalle.cosecha.data.local.dao.PesajeDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
+import com.agrovalle.cosecha.data.local.entity.EstadoIncidencia
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
@@ -703,6 +704,102 @@ class ParihuelaRepositoryTest {
         assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO })
     }
 
+    @Test
+    fun `incidencia de mezcla nace PENDIENTE y al resolverla queda REVISADA con accion, hora y responsable`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val tRev = Date(1_700_000_060_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", t0)
+        val res = repository.registrarJabas(parihuela.id, 4, "Ventura", "Cuartel 01", t0)
+        val incidencia = res.incidenciaGenerada!!
+
+        assertEquals(EstadoIncidencia.PENDIENTE, incidencia.estado)
+        assertNull(incidencia.accionTomada)
+        assertNull(incidencia.horaRevision)
+        assertNull(incidencia.responsable)
+
+        val revisada = repository.resolverIncidencia(
+            incidenciaId = incidencia.id,
+            accion = ParihuelaRepository.ACCION_SEPARAR_JABA,
+            responsable = "Capataz de cuadrilla",
+            ahora = tRev
+        )
+
+        assertEquals(EstadoIncidencia.REVISADA, revisada.estado)
+        assertEquals(ParihuelaRepository.ACCION_SEPARAR_JABA, revisada.accionTomada)
+        assertEquals(tRev, revisada.horaRevision)
+        assertEquals("Capataz de cuadrilla", revisada.responsable)
+        assertEquals(EstadoParihuela.ABIERTA, parihuelaDao.getById(parihuela.id)!!.estado)
+
+        try {
+            repository.resolverIncidencia(
+                incidenciaId = incidencia.id,
+                accion = ParihuelaRepository.ACCION_DESCARTAR_ERROR,
+                responsable = "Otro",
+                ahora = tRev
+            )
+            fail("No debería permitir resolver una incidencia ya REVISADA")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+    }
+
+    @Test
+    fun `accion Revisar el lote o la parihuela retiene por calidad, bloquea sellado y permite Liberar luego`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val tRet = Date(1_700_000_030_000L)
+        val tLib = Date(1_700_000_090_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", t0)
+        repository.registrarPesaje("Juan Perez", 20, "Biloxi", "Cuartel 01", t0)
+        val mezcla = repository.registrarJabas(parihuela.id, 5, "Ventura", "Cuartel 01", t0)
+        val incId = mezcla.incidenciaGenerada!!.id
+
+        repository.resolverIncidencia(
+            incidenciaId = incId,
+            accion = ParihuelaRepository.ACCION_REVISAR_LOTE_PARIHUELA,
+            responsable = "Capataz Maria",
+            ahora = tRet
+        )
+
+        val retenida = parihuelaDao.getById(parihuela.id)!!
+        assertEquals(EstadoParihuela.RETENIDA_CALIDAD, retenida.estado)
+        assertTrue(bitacoraDao.items.any {
+            it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_RETENIDA_CALIDAD
+        })
+
+        // Se muestra como retenida en el panel y en consulta de origen
+        val resumen = repository.observarResumenPanel { tRet }.first()
+        assertEquals(1, resumen.totalRetenidasCalidad)
+        assertEquals(listOf(parihuela.id), resumen.retenidasCalidad.map { it.id })
+        val origen = repository.consultarOrigenPorCodigo(parihuela.codigo) as ConsultaOrigenParihuela.Encontrado
+        assertEquals(EstadoParihuela.RETENIDA_CALIDAD, origen.origen.estado)
+
+        // Una parihuela retenida no se puede sellar ni recibir pesajes ni abrir otra mientras sigue retenida
+        try {
+            repository.sellarAnticipadamente(parihuela.id, "Intentando sellar retenida", tRet)
+            fail("No debería permitir sellar una parihuela retenida por calidad")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+        try {
+            repository.registrarPesaje("Juan Perez", 10, "Biloxi", "Cuartel 01", tRet)
+            fail("No debería permitir registrar pesajes sobre una parihuela retenida por calidad")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        // Liberar desde Incidencias devuelve ABIERTA, registra en bitacora y habilita sellado
+        val liberada = repository.liberarParihuelaRetenida(parihuela.id, "Capataz Maria", tLib)
+        assertEquals(EstadoParihuela.ABIERTA, liberada.estado)
+        assertTrue(bitacoraDao.items.any {
+            it.parihuelaId == parihuela.id &&
+                it.evento == ParihuelaRepository.EVENTO_LIBERACION_CALIDAD &&
+                it.detalle.contains(ParihuelaRepository.ACCION_LIBERAR)
+        })
+
+        val sellada = repository.sellarAnticipadamente(parihuela.id, "Fin de turno", tLib)
+        assertEquals(EstadoParihuela.SELLADA_ANTICIPADA, sellada.estado)
+    }
+
     private class FakeParihuelaDao : ParihuelaDao {
         private var seq = 0L
         private val data = linkedMapOf<Long, ParihuelaEntity>()
@@ -769,6 +866,14 @@ class ParihuelaRepositoryTest {
             items.add(incidencia.copy(id = id))
             return id
         }
+
+        override suspend fun update(incidencia: IncidenciaEntity) {
+            val idx = items.indexOfFirst { it.id == incidencia.id }
+            if (idx >= 0) items[idx] = incidencia
+        }
+
+        override suspend fun getById(id: Long): IncidenciaEntity? =
+            items.firstOrNull { it.id == id }
 
         override fun observeByParihuela(parihuelaId: Long): Flow<List<IncidenciaEntity>> =
             flowOf(items.filter { it.parihuelaId == parihuelaId })

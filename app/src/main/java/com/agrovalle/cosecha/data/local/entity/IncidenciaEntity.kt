@@ -30,5 +30,11 @@ data class IncidenciaEntity(
     val tipo: String,
     val detalle: String,
     @ColumnInfo(name = "fecha_hora")
-    val fechaHora: Date
+    val fechaHora: Date,
+    val estado: EstadoIncidencia = EstadoIncidencia.PENDIENTE,
+    @ColumnInfo(name = "accion_tomada")
+    val accionTomada: String? = null,
+    @ColumnInfo(name = "hora_revision")
+    val horaRevision: Date? = null,
+    val responsable: String? = null
 )
