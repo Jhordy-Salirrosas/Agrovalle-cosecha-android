@@ -30,6 +30,8 @@ data class PesajeEntity(
     val jornalero: String,
     @ColumnInfo(name = "cantidad_jabas")
     val cantidadJabas: Int,
+    @ColumnInfo(name = "peso_kg")
+    val pesoKg: Double = 0.0,
     @ColumnInfo(name = "fecha_hora")
     val fechaHora: Date
 )
