@@ -1,22 +1,89 @@
 package com.agrovalle.cosecha.data.repository
 
+import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
 import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
 import com.agrovalle.cosecha.data.local.dao.PesajeDao
+import com.agrovalle.cosecha.data.local.dao.ReasignacionDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.EstadoIncidencia
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
+import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Almacén del cuartel actual asignado a cada jornalero.
+ */
+interface CuartelJornaleroStore {
+    fun obtenerAsignacionesPorNombre(): Map<String, String>
+    fun obtenerCuartel(jornalero: String): String?
+    fun actualizarCuartel(jornalero: String, cuartelDestino: String): String?
+    fun restaurarCuartel(jornalero: String, cuartelAnterior: String?)
+}
+
+/**
+ * Implementación por defecto respaldada por [DatosMemoria].
+ */
+object DatosMemoriaCuartelStore : CuartelJornaleroStore {
+    private fun buscarJornalero(nombre: String) =
+        DatosMemoria.listaJornaleros.firstOrNull {
+            it.nombreCompleto.equals(nombre.trim(), ignoreCase = true)
+        }
+
+    override fun obtenerAsignacionesPorNombre(): Map<String, String> {
+        return DatosMemoria.asignaciones.mapNotNull { (id, cuartel) ->
+            DatosMemoria.buscarJornaleroPorId(id)?.let { it.nombreCompleto to cuartel }
+        }.toMap()
+    }
+
+    override fun obtenerCuartel(jornalero: String): String? {
+        val j = buscarJornalero(jornalero) ?: return null
+        return DatosMemoria.obtenerCuartelAsignado(j.id)
+    }
+
+    override fun actualizarCuartel(jornalero: String, cuartelDestino: String): String? {
+        val j = buscarJornalero(jornalero) ?: return null
+        val anterior = DatosMemoria.obtenerCuartelAsignado(j.id)
+        DatosMemoria.asignarCuartel(j.id, cuartelDestino)
+        return anterior
+    }
+
+    override fun restaurarCuartel(jornalero: String, cuartelAnterior: String?) {
+        val j = buscarJornalero(jornalero) ?: return
+        if (cuartelAnterior == null) {
+            DatosMemoria.asignaciones.remove(j.id)
+        } else {
+            DatosMemoria.asignarCuartel(j.id, cuartelAnterior)
+        }
+    }
+}
+
+private object NoOpReasignacionDao : ReasignacionDao {
+    override suspend fun insert(reasignacion: ReasignacionEntity): Long = 0L
+    override fun observeAll(): Flow<List<ReasignacionEntity>> = flowOf(emptyList())
+    override suspend fun getUltimaPorJornalero(jornalero: String): ReasignacionEntity? = null
+}
+
+/**
+ * Representa un jornalero activo con su cuartel actual y jabas acumuladas para el panel.
+ */
+data class JornaleroCuartelResumen(
+    val nombre: String,
+    val cuartelActual: String,
+    val jabasAcumuladas: Int = 0
+)
 
 /**
  * Ejecutor de bloques transaccionales (Room withTransaction en producción).
@@ -87,7 +154,9 @@ data class ResumenPanelCapataz(
     val jabasPorVariedad: Map<String, Int> = emptyMap(),
     val jabasPorCuartel: Map<String, Int> = emptyMap(),
     val abiertasPorUrgencia: List<ParihuelaAbiertaResumen> = emptyList(),
-    val retenidasCalidad: List<ParihuelaEntity> = emptyList()
+    val retenidasCalidad: List<ParihuelaEntity> = emptyList(),
+    val jornalerosActivos: List<JornaleroCuartelResumen> = emptyList(),
+    val jornalerosPorCuartel: Map<String, List<JornaleroCuartelResumen>> = emptyMap()
 )
 
 /**
@@ -141,7 +210,9 @@ class ParihuelaRepository(
     private val pesajeDao: PesajeDao,
     private val transaccionRunner: TransaccionRunner = object : TransaccionRunner {
         override suspend fun <T> ejecutar(bloque: suspend () -> T): T = bloque()
-    }
+    },
+    private val reasignacionDao: ReasignacionDao = NoOpReasignacionDao,
+    private val cuartelJornaleroStore: CuartelJornaleroStore = DatosMemoriaCuartelStore
 ) {
 
     companion object {
@@ -168,6 +239,17 @@ class ParihuelaRepository(
             ACCION_REVISAR_LOTE_PARIHUELA,
             ACCION_SEPARAR_JABA,
             ACCION_DESCARTAR_ERROR
+        )
+
+        const val MOTIVO_REASIG_REFUERZO_CARGA = "Refuerzo en cuartel con alta carga"
+        const val MOTIVO_REASIG_COBERTURA_AUSENCIA = "Cobertura por ausencia de jornalero"
+        const val MOTIVO_REASIG_AVANCE_CUARTEL = "Avance completado en cuartel de origen"
+        const val MOTIVO_REASIG_PRIORIDAD_VARIEDAD = "Priorización de variedad para empaque"
+        val MOTIVOS_REASIGNACION = listOf(
+            MOTIVO_REASIG_REFUERZO_CARGA,
+            MOTIVO_REASIG_COBERTURA_AUSENCIA,
+            MOTIVO_REASIG_AVANCE_CUARTEL,
+            MOTIVO_REASIG_PRIORIDAD_VARIEDAD
         )
 
         /**
@@ -621,7 +703,11 @@ class ParihuelaRepository(
     fun observarResumenPanel(
         ahoraProvider: () -> Date = { Date() }
     ): Flow<ResumenPanelCapataz> {
-        return parihuelaDao.observeAll().map { parihuelas ->
+        return combine(
+            parihuelaDao.observeAll(),
+            pesajeDao.observeAll(),
+            reasignacionDao.observeAll()
+        ) { parihuelas, pesajes, reasignaciones ->
             val ahora = ahoraProvider()
             val abiertas = parihuelas
                 .filter { it.estado == EstadoParihuela.ABIERTA }
@@ -634,6 +720,7 @@ class ParihuelaRepository(
                 .sortedBy { it.tiempoEspera.restanteMs }
 
             val retenidas = parihuelas.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
+            val jornalerosActivos = construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones)
 
             ResumenPanelCapataz(
                 totalAbiertas = abiertas.size,
@@ -650,9 +737,146 @@ class ParihuelaRepository(
                     .groupBy { it.cuartel }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
                 abiertasPorUrgencia = abiertas,
-                retenidasCalidad = retenidas
+                retenidasCalidad = retenidas,
+                jornalerosActivos = jornalerosActivos,
+                jornalerosPorCuartel = jornalerosActivos
+                    .groupBy { it.cuartelActual }
+                    .toSortedMap()
             )
         }
+    }
+
+    /**
+     * Expone el listado observable de jornaleros activos con su cuartel actual.
+     */
+    fun observarJornalerosConCuartel(): Flow<List<JornaleroCuartelResumen>> {
+        return combine(
+            parihuelaDao.observeAll(),
+            pesajeDao.observeAll(),
+            reasignacionDao.observeAll()
+        ) { parihuelas, pesajes, reasignaciones ->
+            construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones)
+        }
+    }
+
+    /**
+     * Expone el historial observable de reasignaciones de cuartel.
+     */
+    fun observarReasignaciones(): Flow<List<ReasignacionEntity>> =
+        reasignacionDao.observeAll()
+
+    /**
+     * Reasigna un jornalero a un nuevo cuartel eligiendo uno de los motivos predefinidos (AGV-005).
+     * Todo el guardado se ejecuta en una sola transacción: inserta la [ReasignacionEntity]
+     * con `sincronizado = false` y actualiza el cuartel actual del jornalero.
+     */
+    suspend fun reasignarJornaleroACuartel(
+        jornalero: String,
+        cuartelDestino: String,
+        motivo: String,
+        cuartelOrigen: String? = null,
+        hora: Date = Date()
+    ): ReasignacionEntity = enTransaccionAtomica {
+        val jornaleroLimpio = jornalero.trim()
+        val destinoLimpio = cuartelDestino.trim()
+        val motivoLimpio = motivo.trim()
+
+        require(jornaleroLimpio.isNotEmpty()) { "El jornalero es obligatorio" }
+        require(destinoLimpio.isNotEmpty()) { "El cuartel de destino es obligatorio" }
+        val motivoCanonico = MOTIVOS_REASIGNACION.firstOrNull {
+            it.equals(motivoLimpio, ignoreCase = true)
+        } ?: throw IllegalArgumentException(
+            "Debe elegir un motivo predefinido de reasignación válido"
+        )
+
+        val origenResuelto = (cuartelOrigen?.trim()?.takeIf { it.isNotEmpty() }
+            ?: obtenerCuartelActualJornaleroInterno(jornaleroLimpio))
+            ?: throw IllegalStateException(
+                "El jornalero $jornaleroLimpio no tiene cuartel de origen asignado"
+            )
+
+        require(!destinoLimpio.equals(origenResuelto, ignoreCase = true)) {
+            "El cuartel de destino ($destinoLimpio) debe ser distinto al cuartel de origen ($origenResuelto)"
+        }
+
+        val nueva = ReasignacionEntity(
+            jornalero = jornaleroLimpio,
+            cuartelOrigen = origenResuelto,
+            cuartelDestino = destinoLimpio,
+            motivo = motivoCanonico,
+            hora = hora,
+            sincronizado = false
+        )
+
+        val anterior = cuartelJornaleroStore.obtenerCuartel(jornaleroLimpio)
+        try {
+            val id = reasignacionDao.insert(nueva)
+            cuartelJornaleroStore.actualizarCuartel(jornaleroLimpio, destinoLimpio)
+            return@enTransaccionAtomica nueva.copy(id = id)
+        } catch (t: Throwable) {
+            cuartelJornaleroStore.restaurarCuartel(jornaleroLimpio, anterior)
+            throw t
+        }
+    }
+
+    private suspend fun obtenerCuartelActualJornaleroInterno(jornalero: String): String? {
+        cuartelJornaleroStore.obtenerCuartel(jornalero)?.let { return it }
+        reasignacionDao.getUltimaPorJornalero(jornalero)?.cuartelDestino?.let { return it }
+        val parihuelasById = parihuelaDao.observeAll().first().associateBy { it.id }
+        val ultimoPesaje = pesajeDao.observeAll().first()
+            .filter { it.jornalero.equals(jornalero, ignoreCase = true) }
+            .maxWithOrNull(compareBy<PesajeEntity> { it.fechaHora.time }.thenBy { it.id })
+        return ultimoPesaje?.let { parihuelasById[it.parihuelaId]?.cuartel }
+    }
+
+    private fun construirJornalerosConCuartel(
+        parihuelas: List<ParihuelaEntity>,
+        pesajes: List<PesajeEntity>,
+        reasignaciones: List<ReasignacionEntity>
+    ): List<JornaleroCuartelResumen> {
+        val parihuelasById = parihuelas.associateBy { it.id }
+        val cuartelInicialPorPesaje = linkedMapOf<String, String>()
+        val jabasPorJornalero = linkedMapOf<String, Int>()
+        val nombresCanonicos = linkedMapOf<String, String>()
+
+        pesajes
+            .sortedWith(compareBy<PesajeEntity> { it.fechaHora.time }.thenBy { it.id })
+            .forEach { p ->
+                val clave = p.jornalero.trim().lowercase()
+                nombresCanonicos.putIfAbsent(clave, p.jornalero.trim())
+                parihuelasById[p.parihuelaId]?.cuartel?.let { cuartel ->
+                    cuartelInicialPorPesaje[clave] = cuartel
+                }
+                jabasPorJornalero[clave] = (jabasPorJornalero[clave] ?: 0) + p.cantidadJabas
+            }
+
+        val cuartelPorReasignacion = linkedMapOf<String, String>()
+        reasignaciones
+            .sortedWith(compareBy<ReasignacionEntity> { it.hora.time }.thenBy { it.id })
+            .forEach { r ->
+                val clave = r.jornalero.trim().lowercase()
+                nombresCanonicos.putIfAbsent(clave, r.jornalero.trim())
+                cuartelPorReasignacion[clave] = r.cuartelDestino
+            }
+
+        val asignacionesEnStore = linkedMapOf<String, String>()
+        cuartelJornaleroStore.obtenerAsignacionesPorNombre().forEach { (nombre, cuartel) ->
+            val clave = nombre.trim().lowercase()
+            nombresCanonicos.putIfAbsent(clave, nombre.trim())
+            asignacionesEnStore[clave] = cuartel
+        }
+
+        return nombresCanonicos.entries.mapNotNull { (clave, nombre) ->
+            val cuartelActual = asignacionesEnStore[clave]
+                ?: cuartelPorReasignacion[clave]
+                ?: cuartelInicialPorPesaje[clave]
+                ?: return@mapNotNull null
+            JornaleroCuartelResumen(
+                nombre = nombre,
+                cuartelActual = cuartelActual,
+                jabasAcumuladas = jabasPorJornalero[clave] ?: 0
+            )
+        }.sortedWith(compareBy<JornaleroCuartelResumen> { it.cuartelActual }.thenBy { it.nombre })
     }
 
     /**

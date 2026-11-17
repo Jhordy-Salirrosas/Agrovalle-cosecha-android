@@ -1,15 +1,18 @@
 package com.agrovalle.cosecha.data.repository
 
+import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.data.local.dao.BitacoraDao
 import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
 import com.agrovalle.cosecha.data.local.dao.PesajeDao
+import com.agrovalle.cosecha.data.local.dao.ReasignacionDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.EstadoIncidencia
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
+import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -31,15 +34,24 @@ class ParihuelaRepositoryTest {
     private lateinit var bitacoraDao: FakeBitacoraDao
     private lateinit var incidenciaDao: FakeIncidenciaDao
     private lateinit var pesajeDao: FakePesajeDao
+    private lateinit var reasignacionDao: FakeReasignacionDao
     private lateinit var repository: ParihuelaRepository
 
     @Before
     fun setUp() {
+        DatosMemoria.reiniciarTurno()
         parihuelaDao = FakeParihuelaDao()
         bitacoraDao = FakeBitacoraDao()
         incidenciaDao = FakeIncidenciaDao()
         pesajeDao = FakePesajeDao()
-        repository = ParihuelaRepository(parihuelaDao, bitacoraDao, incidenciaDao, pesajeDao)
+        reasignacionDao = FakeReasignacionDao()
+        repository = ParihuelaRepository(
+            parihuelaDao = parihuelaDao,
+            bitacoraDao = bitacoraDao,
+            incidenciaDao = incidenciaDao,
+            pesajeDao = pesajeDao,
+            reasignacionDao = reasignacionDao
+        )
     }
 
     @Test
@@ -800,6 +812,133 @@ class ParihuelaRepositoryTest {
         assertEquals(EstadoParihuela.SELLADA_ANTICIPADA, sellada.estado)
     }
 
+    @Test
+    fun `motivos predefinidos de reasignacion son exactamente 4`() {
+        assertEquals(4, ParihuelaRepository.MOTIVOS_REASIGNACION.size)
+        assertEquals(4, ParihuelaRepository.MOTIVOS_REASIGNACION.distinct().size)
+    }
+
+    @Test
+    fun `reasignarJornaleroACuartel inserta Reasignacion no sincronizada, actualiza cuartel y refleja destino en panel`() = runBlocking {
+        val j1 = DatosMemoria.listaJornaleros.first()
+        DatosMemoria.asignarCuartel(j1.id, "Cuartel 01")
+        val tPes = Date(1_700_000_000_000L)
+        val tReasig = Date(1_700_000_120_000L)
+
+        repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", tPes)
+        repository.registrarPesaje(j1.nombreCompleto, 15, "Biloxi", "Cuartel 01", tPes)
+
+        val registrada = repository.reasignarJornaleroACuartel(
+            jornalero = j1.nombreCompleto,
+            cuartelDestino = "Cuartel 05",
+            motivo = ParihuelaRepository.MOTIVO_REASIG_REFUERZO_CARGA,
+            hora = tReasig
+        )
+
+        assertEquals(j1.nombreCompleto, registrada.jornalero)
+        assertEquals("Cuartel 01", registrada.cuartelOrigen)
+        assertEquals("Cuartel 05", registrada.cuartelDestino)
+        assertEquals(ParihuelaRepository.MOTIVO_REASIG_REFUERZO_CARGA, registrada.motivo)
+        assertEquals(tReasig, registrada.hora)
+        assertFalse(registrada.sincronizado)
+        assertEquals("Cuartel 05", DatosMemoria.obtenerCuartelAsignado(j1.id))
+
+        val resumen = repository.observarResumenPanel { tReasig }.first()
+        assertNull(resumen.jornalerosPorCuartel["Cuartel 01"])
+        val enDestino = resumen.jornalerosPorCuartel["Cuartel 05"].orEmpty()
+        assertEquals(1, enDestino.size)
+        assertEquals(j1.nombreCompleto, enDestino.first().nombre)
+        assertEquals(15, enDestino.first().jabasAcumuladas)
+
+        val historial = repository.observarReasignaciones().first()
+        assertEquals(1, historial.size)
+        assertEquals(registrada.id, historial.first().id)
+    }
+
+    @Test
+    fun `reasignarJornaleroACuartel rechaza motivo invalido o mismo cuartel de destino`() = runBlocking {
+        val j1 = DatosMemoria.listaJornaleros.first()
+        DatosMemoria.asignarCuartel(j1.id, "Cuartel 01")
+
+        try {
+            repository.reasignarJornaleroACuartel(
+                jornalero = j1.nombreCompleto,
+                cuartelDestino = "Cuartel 01",
+                motivo = ParihuelaRepository.MOTIVO_REASIG_COBERTURA_AUSENCIA
+            )
+            fail("Debió rechazar reasignación al mismo cuartel")
+        } catch (expected: IllegalArgumentException) {
+            // Esperado
+        }
+
+        try {
+            repository.reasignarJornaleroACuartel(
+                jornalero = j1.nombreCompleto,
+                cuartelDestino = "Cuartel 05",
+                motivo = "Motivo inventado libre"
+            )
+            fail("Debió rechazar un motivo fuera de los 4 predefinidos")
+        } catch (expected: IllegalArgumentException) {
+            // Esperado
+        }
+
+        assertTrue(reasignacionDao.items.isEmpty())
+        assertEquals("Cuartel 01", DatosMemoria.obtenerCuartelAsignado(j1.id))
+    }
+
+    @Test
+    fun `reasignarJornaleroACuartel es una sola transaccion y revierte cambios ante fallo`() = runBlocking {
+        val j1 = DatosMemoria.listaJornaleros.first()
+        DatosMemoria.asignarCuartel(j1.id, "Cuartel 01")
+
+        val transaccionConRollback = object : TransaccionRunner {
+            override suspend fun <T> ejecutar(bloque: suspend () -> T): T {
+                val snapshotReasig = reasignacionDao.items.toList()
+                return try {
+                    bloque()
+                } catch (t: Throwable) {
+                    reasignacionDao.items.clear()
+                    reasignacionDao.items.addAll(snapshotReasig)
+                    throw t
+                }
+            }
+        }
+
+        val storeConFallo = object : CuartelJornaleroStore {
+            override fun obtenerAsignacionesPorNombre() = DatosMemoriaCuartelStore.obtenerAsignacionesPorNombre()
+            override fun obtenerCuartel(jornalero: String) = DatosMemoriaCuartelStore.obtenerCuartel(jornalero)
+            override fun actualizarCuartel(jornalero: String, cuartelDestino: String): String? {
+                throw IllegalStateException("Fallo simulado al actualizar cuartel")
+            }
+            override fun restaurarCuartel(jornalero: String, cuartelAnterior: String?) =
+                DatosMemoriaCuartelStore.restaurarCuartel(jornalero, cuartelAnterior)
+        }
+
+        val repoAtomico = ParihuelaRepository(
+            parihuelaDao = parihuelaDao,
+            bitacoraDao = bitacoraDao,
+            incidenciaDao = incidenciaDao,
+            pesajeDao = pesajeDao,
+            transaccionRunner = transaccionConRollback,
+            reasignacionDao = reasignacionDao,
+            cuartelJornaleroStore = storeConFallo
+        )
+
+        try {
+            repoAtomico.reasignarJornaleroACuartel(
+                jornalero = j1.nombreCompleto,
+                cuartelDestino = "Cuartel 05",
+                motivo = ParihuelaRepository.MOTIVO_REASIG_AVANCE_CUARTEL
+            )
+            fail("Debió propagar el error de la transacción")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        assertTrue(reasignacionDao.items.isEmpty())
+        assertEquals("Cuartel 01", DatosMemoria.obtenerCuartelAsignado(j1.id))
+    }
+
     private class FakeParihuelaDao : ParihuelaDao {
         private var seq = 0L
         private val data = linkedMapOf<Long, ParihuelaEntity>()
@@ -902,5 +1041,23 @@ class ParihuelaRepositoryTest {
             flowOf(items.filter { it.parihuelaId == parihuelaId })
 
         override fun observeAll(): Flow<List<PesajeEntity>> = flowOf(items.toList())
+    }
+
+    private class FakeReasignacionDao : ReasignacionDao {
+        private var seq = 0L
+        val items = mutableListOf<ReasignacionEntity>()
+
+        override suspend fun insert(reasignacion: ReasignacionEntity): Long {
+            val id = ++seq
+            items.add(reasignacion.copy(id = id))
+            return id
+        }
+
+        override fun observeAll(): Flow<List<ReasignacionEntity>> =
+            flowOf(items.sortedWith(compareByDescending<ReasignacionEntity> { it.hora.time }.thenByDescending { it.id }))
+
+        override suspend fun getUltimaPorJornalero(jornalero: String): ReasignacionEntity? =
+            items.filter { it.jornalero.equals(jornalero, ignoreCase = true) }
+                .maxWithOrNull(compareBy<ReasignacionEntity> { it.hora.time }.thenBy { it.id })
     }
 }

@@ -13,10 +13,12 @@ import com.agrovalle.cosecha.data.local.dao.BitacoraDao
 import com.agrovalle.cosecha.data.local.dao.IncidenciaDao
 import com.agrovalle.cosecha.data.local.dao.ParihuelaDao
 import com.agrovalle.cosecha.data.local.dao.PesajeDao
+import com.agrovalle.cosecha.data.local.dao.ReasignacionDao
 import com.agrovalle.cosecha.data.local.entity.BitacoraEntity
 import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
+import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
 import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.TransaccionRunner
 
@@ -28,9 +30,10 @@ import com.agrovalle.cosecha.data.repository.TransaccionRunner
         ParihuelaEntity::class,
         IncidenciaEntity::class,
         BitacoraEntity::class,
-        PesajeEntity::class
+        PesajeEntity::class,
+        ReasignacionEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -40,6 +43,7 @@ abstract class AgroValleDatabase : RoomDatabase() {
     abstract fun incidenciaDao(): IncidenciaDao
     abstract fun bitacoraDao(): BitacoraDao
     abstract fun pesajeDao(): PesajeDao
+    abstract fun reasignacionDao(): ReasignacionDao
 
     fun crearParihuelaRepository(): ParihuelaRepository {
         return ParihuelaRepository(
@@ -47,6 +51,7 @@ abstract class AgroValleDatabase : RoomDatabase() {
             bitacoraDao = bitacoraDao(),
             incidenciaDao = incidenciaDao(),
             pesajeDao = pesajeDao(),
+            reasignacionDao = reasignacionDao(),
             transaccionRunner = object : TransaccionRunner {
                 override suspend fun <T> ejecutar(bloque: suspend () -> T): T {
                     return withTransaction { bloque() }
@@ -130,6 +135,27 @@ abstract class AgroValleDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `reasignaciones` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `jornalero` TEXT NOT NULL,
+                        `cuartel_origen` TEXT NOT NULL,
+                        `cuartel_destino` TEXT NOT NULL,
+                        `motivo` TEXT NOT NULL,
+                        `hora` INTEGER NOT NULL,
+                        `sincronizado` INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_reasignaciones_jornalero` ON `reasignaciones` (`jornalero`)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AgroValleDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -137,7 +163,7 @@ abstract class AgroValleDatabase : RoomDatabase() {
                     AgroValleDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }
