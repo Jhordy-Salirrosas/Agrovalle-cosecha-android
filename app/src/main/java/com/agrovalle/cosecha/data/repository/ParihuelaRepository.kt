@@ -250,6 +250,7 @@ class ParihuelaRepository(
         const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
         const val EVENTO_ALERTA_POR_VENCER = "ALERTA_POR_VENCER"
         const val EVENTO_RETENCION_EXCEDIDA = "RETENCION_EXCEDIDA"
+        const val EVENTO_TIEMPO_RETENCION = "TIEMPO_RETENCION_TOTAL"
         const val EVENTO_RETENIDA_CALIDAD = "RETENIDA_CALIDAD"
         const val EVENTO_LIBERACION_CALIDAD = "LIBERACION_CALIDAD"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
@@ -304,6 +305,23 @@ class ParihuelaRepository(
         fun calcularDemoraAlertaExactaMs(horaInicio: Date, ahora: Date = Date()): Long {
             val momentoAlerta = horaInicio.time + LIMITE_ESPERA_MS - UMBRAL_POR_VENCER_MS
             return (momentoAlerta - ahora.time).coerceAtLeast(0L)
+        }
+
+        /**
+         * Calcula el tiempo total de retención transcurrido desde el primer pesaje
+         * ([horaInicio]) hasta el sellado ([horaSellado]). Devuelve 0 ms si no hubo pesajes.
+         */
+        fun calcularTiempoRetencionTotalMs(horaInicio: Date?, horaSellado: Date): Long {
+            if (horaInicio == null) return 0L
+            return (horaSellado.time - horaInicio.time).coerceAtLeast(0L)
+        }
+
+        /** Formatea la duración total de retención en minutos y segundos legibles. */
+        fun formatearDuracionRetencion(duracionMs: Long): String {
+            val totalSeg = duracionMs.coerceAtLeast(0L) / 1000L
+            val minutos = totalSeg / 60L
+            val segundos = totalSeg % 60L
+            return "$minutos min $segundos s"
         }
     }
 
@@ -500,6 +518,7 @@ class ParihuelaRepository(
                     fechaHora = ahora
                 )
             )
+            registrarTiempoRetencionTotalAlSellar(sellada, ahora)
 
             val siguiente = abrirNuevaParihuelaInterno(
                 variedad = actual.variedad,
@@ -578,8 +597,30 @@ class ParihuelaRepository(
                 fechaHora = ahora
             )
         )
+        registrarTiempoRetencionTotalAlSellar(sellada, ahora)
 
         return@enTransaccionAtomica sellada
+    }
+
+    private suspend fun registrarTiempoRetencionTotalAlSellar(
+        parihuela: ParihuelaEntity,
+        horaSellado: Date
+    ) {
+        val inicio = parihuela.horaInicio
+        val totalMs = calcularTiempoRetencionTotalMs(inicio, horaSellado)
+        val detalle = if (inicio == null) {
+            "Tiempo total de retención: ${formatearDuracionRetencion(totalMs)} (sin pesajes previos al sellado)"
+        } else {
+            "Tiempo total de retención: ${formatearDuracionRetencion(totalMs)} (${totalMs / 60_000L} min, $totalMs ms desde primer pesaje hasta sellado)"
+        }
+        bitacoraDao.insert(
+            BitacoraEntity(
+                parihuelaId = parihuela.id,
+                evento = EVENTO_TIEMPO_RETENCION,
+                detalle = detalle,
+                fechaHora = horaSellado
+            )
+        )
     }
 
     private suspend fun registrarRetencionExcedidaSiCorresponde(

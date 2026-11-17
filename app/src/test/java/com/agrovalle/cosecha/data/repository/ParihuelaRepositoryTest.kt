@@ -98,11 +98,13 @@ class ParihuelaRepositoryTest {
         assertEquals("CUA-02", segunda.cuadrilla)
         assertNotEquals(primera.codigo, segunda.codigo)
 
-        assertEquals(1, bitacoraDao.items.size)
-        val registro = bitacoraDao.items.first()
+        val eventosSellada = bitacoraDao.items.filter { it.parihuelaId == primera.id }
+        assertEquals(2, eventosSellada.size)
+        val registro = eventosSellada.first { it.evento == ParihuelaRepository.EVENTO_SELLADO_LIMITE }
         assertEquals(primera.id, registro.parihuelaId)
-        assertEquals(ParihuelaRepository.EVENTO_SELLADO_LIMITE, registro.evento)
         assertEquals(sellado, registro.fechaHora)
+        val registroRetencion = eventosSellada.first { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION }
+        assertEquals(sellado, registroRetencion.fechaHora)
     }
 
     @Test
@@ -139,11 +141,12 @@ class ParihuelaRepositoryTest {
         assertEquals(horaSellado, sellada.horaSellado)
         assertEquals("Fin de turno", sellada.motivoSelladoAnticipado)
 
-        assertEquals(1, bitacoraDao.items.size)
-        val registro = bitacoraDao.items.first()
+        val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
+        assertEquals(2, eventos.size)
+        val registro = eventos.first { it.evento == ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO }
         assertEquals(parihuela.id, registro.parihuelaId)
-        assertEquals(ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO, registro.evento)
         assertEquals("Fin de turno", registro.detalle)
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
 
         try {
             repository.registrarJabas(parihuela.id, 1, "Ventura", "Cuartel 18")
@@ -287,7 +290,8 @@ class ParihuelaRepositoryTest {
         }
 
         val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
-        assertEquals(2, eventos.size)
+        assertEquals(3, eventos.size)
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
         assertEquals(ParihuelaRepository.EVENTO_INTENTO_EDICION, eventos.last().evento)
         assertEquals(intento, eventos.last().fechaHora)
     }
@@ -306,7 +310,8 @@ class ParihuelaRepositoryTest {
         }
 
         val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
-        assertEquals(2, eventos.size)
+        assertEquals(3, eventos.size)
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
         assertEquals(ParihuelaRepository.EVENTO_INTENTO_EDICION, eventos.last().evento)
     }
 
@@ -1120,6 +1125,52 @@ class ParihuelaRepositoryTest {
             assertEquals(120, origen.conteoJabas)
             assertEquals(EstadoParihuela.SELLADA, origen.estado)
         }
+    }
+
+    @Test
+    fun `al sellar por limite registra en bitacora el tiempo total de retencion desde el primer pesaje`() = runBlocking {
+        val apertura = Date(1_700_000_000_000L)
+        val primerPesaje = Date(apertura.time + 10L * 60_000L)
+        val sellado = Date(primerPesaje.time + 22L * 60_000L + 15_000L)
+
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", apertura)
+        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", primerPesaje)
+        repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", sellado)
+
+        val retencion = bitacoraDao.items.firstOrNull {
+            it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION
+        }
+        assertNotNull(retencion)
+        assertEquals(sellado, retencion!!.fechaHora)
+        // Debe medir 22 min 15 s (desde primerPesaje), no 32 min 15 s (desde apertura)
+        assertTrue(retencion.detalle.contains("22 min 15 s"))
+    }
+
+    @Test
+    fun `al sellar anticipadamente registra en bitacora el tiempo total de retencion o cero sin pesajes`() = runBlocking {
+        val apertura = Date(1_700_000_000_000L)
+        val primerPesaje = Date(apertura.time + 5L * 60_000L)
+        val sellado = Date(primerPesaje.time + 15L * 60_000L + 30_000L)
+
+        val conPesaje = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", apertura)
+        repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", primerPesaje)
+        repository.sellarAnticipadamente(conPesaje.id, "Cierre de lote", sellado)
+
+        val logConPesaje = bitacoraDao.items.firstOrNull {
+            it.parihuelaId == conPesaje.id && it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION
+        }
+        assertNotNull(logConPesaje)
+        assertTrue(logConPesaje!!.detalle.contains("15 min 30 s"))
+
+        // Parihuela sellada anticipadamente sin ningun pesaje previo
+        val sinPesaje = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", apertura)
+        repository.sellarAnticipadamente(sinPesaje.id, "No se utilizó", Date(apertura.time + 60_000L))
+
+        val logSinPesaje = bitacoraDao.items.firstOrNull {
+            it.parihuelaId == sinPesaje.id && it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION
+        }
+        assertNotNull(logSinPesaje)
+        assertTrue(logSinPesaje!!.detalle.contains("0 min 0 s"))
     }
 
     private class FakeParihuelaDao : ParihuelaDao {
