@@ -114,11 +114,17 @@ class ParihuelaActivity : AppCompatActivity() {
 
         binding.btnRegistrarPesajeParihuela.setOnClickListener {
             val cantidad = binding.etCantidadJabas.text?.toString()?.toIntOrNull() ?: 0
+            val pesoKg = binding.etPesoKg.text?.toString()?.trim()?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
             val variedad = binding.etVariedadPesaje.text?.toString().orEmpty()
             val cuartel = binding.etCuartelPesaje.text?.toString().orEmpty()
 
+            if (pesoKg <= 0.0) {
+                binding.etPesoKg.error = "Ingrese un peso en kilos mayor a 0"
+            }
+
             viewModel.registrarPesaje(
                 cantidadJabas = cantidad,
+                pesoKg = pesoKg,
                 variedad = variedad,
                 cuartel = cuartel
             )

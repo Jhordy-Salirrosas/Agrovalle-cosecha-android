@@ -77,12 +77,28 @@ private object NoOpReasignacionDao : ReasignacionDao {
 }
 
 /**
- * Representa un jornalero activo con su cuartel actual y jabas acumuladas para el panel.
+ * Representa un jornalero activo con su cuartel actual, kilos, jabas y estado de rendimiento.
  */
 data class JornaleroCuartelResumen(
     val nombre: String,
     val cuartelActual: String,
-    val jabasAcumuladas: Int = 0
+    val jabasAcumuladas: Int = 0,
+    val kilosNetos: Double = 0.0,
+    val horaPrimerPesaje: Date? = null,
+    val tasaKgPorHora: Double? = null,
+    val bajoRendimiento: Boolean = false
+)
+
+/**
+ * Métricas de rendimiento calculadas desde los pesajes reales de un jornalero (AGV-005).
+ */
+data class RendimientoJornalero(
+    val jornalero: String,
+    val totalKilos: Double,
+    val totalJabas: Int,
+    val horaPrimerPesaje: Date,
+    val tasaKgPorHora: Double?,
+    val bajoRendimiento: Boolean
 )
 
 /**
@@ -151,10 +167,14 @@ data class ResumenPanelCapataz(
     val totalSelladas: Int = 0,
     val totalSelladasAnticipadas: Int = 0,
     val totalJabas: Int = 0,
+    val totalKilosNetos: Double = 0.0,
+    val totalJornalerosActivos: Int = 0,
     val jabasPorVariedad: Map<String, Int> = emptyMap(),
     val jabasPorCuartel: Map<String, Int> = emptyMap(),
+    val kilosPorCuartel: Map<String, Double> = emptyMap(),
     val abiertasPorUrgencia: List<ParihuelaAbiertaResumen> = emptyList(),
     val retenidasCalidad: List<ParihuelaEntity> = emptyList(),
+    val rendimientoDetallado: List<RendimientoJornalero> = emptyList(),
     val jornalerosActivos: List<JornaleroCuartelResumen> = emptyList(),
     val jornalerosPorCuartel: Map<String, List<JornaleroCuartelResumen>> = emptyMap()
 )
@@ -251,6 +271,27 @@ class ParihuelaRepository(
             MOTIVO_REASIG_AVANCE_CUARTEL,
             MOTIVO_REASIG_PRIORIDAD_VARIEDAD
         )
+        const val UMBRAL_BAJO_RENDIMIENTO_KG_HORA = 8.75 // 35 kg / 4 h
+        const val TIEMPO_MINIMO_CALCULO_TASA_MS = 60_000L
+
+        /**
+         * Calcula la tasa de rendimiento (kg/h) desde el primer pesaje y determina
+         * si está por debajo del umbral de 8,75 kg/h (35 kg en 4 h).
+         * Si el tiempo transcurrido es casi cero (< 1 min), no marca alerta.
+         */
+        fun calcularTasaRendimiento(
+            totalKilos: Double,
+            horaPrimerPesaje: Date,
+            ahora: Date = Date()
+        ): Pair<Double?, Boolean> {
+            val transcurridoMs = (ahora.time - horaPrimerPesaje.time).coerceAtLeast(0L)
+            if (transcurridoMs < TIEMPO_MINIMO_CALCULO_TASA_MS) {
+                return null to false
+            }
+            val horas = transcurridoMs.toDouble() / (60.0 * 60.0 * 1000.0)
+            val tasa = totalKilos / horas
+            return tasa to (tasa < UMBRAL_BAJO_RENDIMIENTO_KG_HORA)
+        }
 
         /**
          * Calcula la demora en milisegundos hasta el momento exacto en que la parihuela
@@ -701,13 +742,15 @@ class ParihuelaRepository(
      * Expone el resumen observable para el panel del capataz, calculado desde la BD.
      */
     fun observarResumenPanel(
+        tickFlow: Flow<Long> = flowOf(0L),
         ahoraProvider: () -> Date = { Date() }
     ): Flow<ResumenPanelCapataz> {
         return combine(
             parihuelaDao.observeAll(),
             pesajeDao.observeAll(),
-            reasignacionDao.observeAll()
-        ) { parihuelas, pesajes, reasignaciones ->
+            reasignacionDao.observeAll(),
+            tickFlow
+        ) { parihuelas, pesajes, reasignaciones, _ ->
             val ahora = ahoraProvider()
             val abiertas = parihuelas
                 .filter { it.estado == EstadoParihuela.ABIERTA }
@@ -720,7 +763,16 @@ class ParihuelaRepository(
                 .sortedBy { it.tiempoEspera.restanteMs }
 
             val retenidas = parihuelas.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
-            val jornalerosActivos = construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones)
+            val rendimientoDetallado = construirRendimientoDetallado(pesajes, ahora)
+            val jornalerosActivos = construirJornalerosConCuartel(
+                parihuelas = parihuelas,
+                pesajes = pesajes,
+                reasignaciones = reasignaciones,
+                ahora = ahora
+            )
+            val porCuartel = jornalerosActivos
+                .groupBy { it.cuartelActual }
+                .toSortedMap()
 
             ResumenPanelCapataz(
                 totalAbiertas = abiertas.size,
@@ -730,32 +782,47 @@ class ParihuelaRepository(
                     it.estado == EstadoParihuela.SELLADA_ANTICIPADA
                 },
                 totalJabas = parihuelas.sumOf { it.conteoJabas },
+                totalKilosNetos = pesajes.sumOf { it.pesoKg },
+                totalJornalerosActivos = jornalerosActivos.size,
                 jabasPorVariedad = parihuelas
                     .groupBy { it.variedad }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
                 jabasPorCuartel = parihuelas
                     .groupBy { it.cuartel }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
+                kilosPorCuartel = porCuartel.mapValues { (_, lista) -> lista.sumOf { it.kilosNetos } },
                 abiertasPorUrgencia = abiertas,
                 retenidasCalidad = retenidas,
+                rendimientoDetallado = rendimientoDetallado,
                 jornalerosActivos = jornalerosActivos,
-                jornalerosPorCuartel = jornalerosActivos
-                    .groupBy { it.cuartelActual }
-                    .toSortedMap()
+                jornalerosPorCuartel = porCuartel
             )
         }
     }
 
     /**
-     * Expone el listado observable de jornaleros activos con su cuartel actual.
+     * Expone el listado observable de jornaleros activos con su cuartel actual y métricas.
      */
-    fun observarJornalerosConCuartel(): Flow<List<JornaleroCuartelResumen>> {
+    fun observarJornalerosConCuartel(
+        ahoraProvider: () -> Date = { Date() }
+    ): Flow<List<JornaleroCuartelResumen>> {
         return combine(
             parihuelaDao.observeAll(),
             pesajeDao.observeAll(),
             reasignacionDao.observeAll()
         ) { parihuelas, pesajes, reasignaciones ->
-            construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones)
+            construirJornalerosConCuartel(parihuelas, pesajes, reasignaciones, ahoraProvider())
+        }
+    }
+
+    /**
+     * Expone el rendimiento detallado (kilos, jabas, primer pesaje, tasa kg/h y alerta) por jornalero.
+     */
+    fun observarRendimientoDetalladoPorJornalero(
+        ahoraProvider: () -> Date = { Date() }
+    ): Flow<List<RendimientoJornalero>> {
+        return pesajeDao.observeAll().map { pesajes ->
+            construirRendimientoDetallado(pesajes, ahoraProvider())
         }
     }
 
@@ -829,14 +896,41 @@ class ParihuelaRepository(
         return ultimoPesaje?.let { parihuelasById[it.parihuelaId]?.cuartel }
     }
 
+    private fun construirRendimientoDetallado(
+        pesajes: List<PesajeEntity>,
+        ahora: Date
+    ): List<RendimientoJornalero> {
+        if (pesajes.isEmpty()) return emptyList()
+        return pesajes
+            .groupBy { it.jornalero.trim().lowercase() }
+            .values
+            .map { lista ->
+                val ordenado = lista.sortedWith(compareBy<PesajeEntity> { it.fechaHora.time }.thenBy { it.id })
+                val nombre = ordenado.first().jornalero.trim()
+                val totalKilos = ordenado.sumOf { it.pesoKg }
+                val totalJabas = ordenado.sumOf { it.cantidadJabas }
+                val primerPesaje = ordenado.first().fechaHora
+                val (tasa, bajoUmbral) = calcularTasaRendimiento(totalKilos, primerPesaje, ahora)
+                RendimientoJornalero(
+                    jornalero = nombre,
+                    totalKilos = totalKilos,
+                    totalJabas = totalJabas,
+                    horaPrimerPesaje = primerPesaje,
+                    tasaKgPorHora = tasa,
+                    bajoRendimiento = bajoUmbral
+                )
+            }
+            .sortedBy { it.jornalero }
+    }
+
     private fun construirJornalerosConCuartel(
         parihuelas: List<ParihuelaEntity>,
         pesajes: List<PesajeEntity>,
-        reasignaciones: List<ReasignacionEntity>
+        reasignaciones: List<ReasignacionEntity>,
+        ahora: Date
     ): List<JornaleroCuartelResumen> {
         val parihuelasById = parihuelas.associateBy { it.id }
         val cuartelInicialPorPesaje = linkedMapOf<String, String>()
-        val jabasPorJornalero = linkedMapOf<String, Int>()
         val nombresCanonicos = linkedMapOf<String, String>()
 
         pesajes
@@ -847,8 +941,10 @@ class ParihuelaRepository(
                 parihuelasById[p.parihuelaId]?.cuartel?.let { cuartel ->
                     cuartelInicialPorPesaje[clave] = cuartel
                 }
-                jabasPorJornalero[clave] = (jabasPorJornalero[clave] ?: 0) + p.cantidadJabas
             }
+
+        val rendimientosPorClave = construirRendimientoDetallado(pesajes, ahora)
+            .associateBy { it.jornalero.trim().lowercase() }
 
         val cuartelPorReasignacion = linkedMapOf<String, String>()
         reasignaciones
@@ -871,10 +967,15 @@ class ParihuelaRepository(
                 ?: cuartelPorReasignacion[clave]
                 ?: cuartelInicialPorPesaje[clave]
                 ?: return@mapNotNull null
+            val rend = rendimientosPorClave[clave]
             JornaleroCuartelResumen(
                 nombre = nombre,
                 cuartelActual = cuartelActual,
-                jabasAcumuladas = jabasPorJornalero[clave] ?: 0
+                jabasAcumuladas = rend?.totalJabas ?: 0,
+                kilosNetos = rend?.totalKilos ?: 0.0,
+                horaPrimerPesaje = rend?.horaPrimerPesaje,
+                tasaKgPorHora = rend?.tasaKgPorHora,
+                bajoRendimiento = rend?.bajoRendimiento ?: false
             )
         }.sortedWith(compareBy<JornaleroCuartelResumen> { it.cuartelActual }.thenBy { it.nombre })
     }
@@ -886,11 +987,15 @@ class ParihuelaRepository(
     suspend fun registrarPesaje(
         jornalero: String,
         cantidadJabas: Int,
+        pesoKg: Double,
         variedad: String,
         cuartel: String,
         ahora: Date = Date()
     ): ResultadoPesaje = enTransaccionAtomica {
         require(jornalero.isNotBlank()) { "El jornalero es obligatorio" }
+        require(pesoKg.isFinite() && pesoKg > 0.0) {
+            "El peso neto en kilos es obligatorio y debe ser mayor a 0"
+        }
         val abierta = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
             ?: run {
                 val retenida = parihuelaDao.observeByEstado(EstadoParihuela.RETENIDA_CALIDAD)
@@ -928,6 +1033,7 @@ class ParihuelaRepository(
             parihuelaId = abierta.id,
             jornalero = jornalero.trim(),
             cantidadJabas = cantidadJabas,
+            pesoKg = pesoKg,
             fechaHora = ahora
         )
         val pesajeId = pesajeDao.insert(pesaje)

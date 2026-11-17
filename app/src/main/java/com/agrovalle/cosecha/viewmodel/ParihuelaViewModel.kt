@@ -134,6 +134,7 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
     fun registrarPesaje(
         jornalero: String = _uiState.value.jornaleroSeleccionado.orEmpty(),
         cantidadJabas: Int,
+        pesoKg: Double,
         variedad: String,
         cuartel: String
     ) {
@@ -147,6 +148,15 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
             }
             return
         }
+        if (!pesoKg.isFinite() || pesoKg <= 0.0) {
+            _uiState.update {
+                it.copy(
+                    mensaje = "El peso neto en kilos es obligatorio y debe ser mayor a 0.",
+                    esError = true
+                )
+            }
+            return
+        }
 
         viewModelScope.launch {
             try {
@@ -154,6 +164,7 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                     val res = repository.registrarPesaje(
                         jornalero = jornalero,
                         cantidadJabas = cantidadJabas,
+                        pesoKg = pesoKg,
                         variedad = variedad,
                         cuartel = cuartel
                     )
@@ -188,9 +199,9 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                     is ResultadoPesaje.Registrado -> {
                         val msg = if (res.resultadoJabas.selladaPorLimite) {
                             val nueva = res.resultadoJabas.nuevaParihuela?.codigo ?: ""
-                            "Parihuela ${res.resultadoJabas.parihuela.codigo} sellada al llegar a 120 jabas. Se abrió automáticamente $nueva."
+                            "Parihuela ${res.resultadoJabas.parihuela.codigo} sellada al llegar a 120 jabas (${res.pesaje.pesoKg} kg en último pesaje). Se abrió automáticamente $nueva."
                         } else {
-                            "Pesaje registrado: +${res.pesaje.cantidadJabas} jabas para ${res.pesaje.jornalero}."
+                            "Pesaje registrado: +${res.pesaje.cantidadJabas} jabas (${res.pesaje.pesoKg} kg) para ${res.pesaje.jornalero}."
                         }
                         _uiState.update { it.copy(mensaje = msg, esError = false) }
                     }
