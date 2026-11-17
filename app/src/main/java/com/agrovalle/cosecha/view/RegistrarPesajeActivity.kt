@@ -41,6 +41,7 @@ class RegistrarPesajeActivity : AppCompatActivity() {
     private var esTaraPorDefecto: Boolean = true
 
     companion object {
+        const val EXTRA_PESAJE_ID = "extra_pesaje_id"
         const val EXTRA_PESO_NETO = "extra_peso_neto"
         const val EXTRA_ACUMULADO_DIARIO = "extra_acumulado_diario"
         const val EXTRA_ES_TARA_CALIBRADA = "extra_es_tara_calibrada"
@@ -273,6 +274,7 @@ class RegistrarPesajeActivity : AppCompatActivity() {
                 // AGV-004: acumulado diario real del cosechador (suma en memoria).
                 viewModel.cargarAcumuladoDiario(jornalero.id) { acumulado ->
                     val intent = Intent(this, ConfirmacionActivity::class.java).apply {
+                        putExtra(EXTRA_PESAJE_ID, viewModel.ultimoPesajeRegistradoId ?: 0L)
                         putExtra(EXTRA_PESO_NETO, pesoNeto)
                         putExtra(EXTRA_ACUMULADO_DIARIO, acumulado)
                         putExtra(EXTRA_ES_TARA_CALIBRADA, !porDefecto)

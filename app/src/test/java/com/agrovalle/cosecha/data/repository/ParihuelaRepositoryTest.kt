@@ -13,11 +13,21 @@ import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
+import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.util.QrUtil
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -42,9 +52,9 @@ class ParihuelaRepositoryTest {
     fun setUp() {
         DatosMemoria.reiniciarTurno()
         parihuelaDao = FakeParihuelaDao()
-        bitacoraDao = FakeBitacoraDao()
-        incidenciaDao = FakeIncidenciaDao()
-        pesajeDao = FakePesajeDao()
+        bitacoraDao = FakeBitacoraDao { parihuelaDao.existe(it) }
+        incidenciaDao = FakeIncidenciaDao { parihuelaDao.existe(it) }
+        pesajeDao = FakePesajeDao { parihuelaDao.existe(it) }
         reasignacionDao = FakeReasignacionDao()
         repository = ParihuelaRepository(
             parihuelaDao = parihuelaDao,
@@ -98,11 +108,13 @@ class ParihuelaRepositoryTest {
         assertEquals("CUA-02", segunda.cuadrilla)
         assertNotEquals(primera.codigo, segunda.codigo)
 
-        assertEquals(1, bitacoraDao.items.size)
-        val registro = bitacoraDao.items.first()
+        val eventosSellada = bitacoraDao.items.filter { it.parihuelaId == primera.id }
+        assertEquals(2, eventosSellada.size)
+        val registro = eventosSellada.first { it.evento == ParihuelaRepository.EVENTO_SELLADO_LIMITE }
         assertEquals(primera.id, registro.parihuelaId)
-        assertEquals(ParihuelaRepository.EVENTO_SELLADO_LIMITE, registro.evento)
         assertEquals(sellado, registro.fechaHora)
+        val registroRetencion = eventosSellada.first { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION }
+        assertEquals(sellado, registroRetencion.fechaHora)
     }
 
     @Test
@@ -139,11 +151,12 @@ class ParihuelaRepositoryTest {
         assertEquals(horaSellado, sellada.horaSellado)
         assertEquals("Fin de turno", sellada.motivoSelladoAnticipado)
 
-        assertEquals(1, bitacoraDao.items.size)
-        val registro = bitacoraDao.items.first()
+        val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
+        assertEquals(2, eventos.size)
+        val registro = eventos.first { it.evento == ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO }
         assertEquals(parihuela.id, registro.parihuelaId)
-        assertEquals(ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO, registro.evento)
         assertEquals("Fin de turno", registro.detalle)
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
 
         try {
             repository.registrarJabas(parihuela.id, 1, "Ventura", "Cuartel 18")
@@ -287,7 +300,8 @@ class ParihuelaRepositoryTest {
         }
 
         val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
-        assertEquals(2, eventos.size)
+        assertEquals(3, eventos.size)
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
         assertEquals(ParihuelaRepository.EVENTO_INTENTO_EDICION, eventos.last().evento)
         assertEquals(intento, eventos.last().fechaHora)
     }
@@ -306,7 +320,8 @@ class ParihuelaRepositoryTest {
         }
 
         val eventos = bitacoraDao.items.filter { it.parihuelaId == parihuela.id }
-        assertEquals(2, eventos.size)
+        assertEquals(3, eventos.size)
+        assertTrue(eventos.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
         assertEquals(ParihuelaRepository.EVENTO_INTENTO_EDICION, eventos.last().evento)
     }
 
@@ -477,7 +492,7 @@ class ParihuelaRepositoryTest {
 
     @Test
     fun `avance de parihuela abierta es correcto en 0, 100 y 120`() = runBlocking {
-        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", Date(1_700_000_000_000L))
+        repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", Date(1_700_000_000_000L))
 
         val avance0 = repository.observarAvanceParihuelaAbierta().first()!!
         assertEquals(0, avance0.jabasActuales)
@@ -537,7 +552,7 @@ class ParihuelaRepositoryTest {
     @Test
     fun `evaluarAlertasTiempo no avisa en EN_ESPERA`() = runBlocking {
         val inicio = Date(1_700_000_000_000L)
-        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
+        repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
         repository.registrarPesaje("Juan Perez", 5, 10.0, "Biloxi", "Cuartel 01", inicio)
 
         val porNotificar = repository.evaluarAlertasTiempo(Date(inicio.time + 10 * 60_000L))
@@ -1122,18 +1137,259 @@ class ParihuelaRepositoryTest {
         }
     }
 
+    @Test
+    fun `al sellar por limite registra en bitacora el tiempo total de retencion desde el primer pesaje`() = runBlocking {
+        val apertura = Date(1_700_000_000_000L)
+        val primerPesaje = Date(apertura.time + 10L * 60_000L)
+        val sellado = Date(primerPesaje.time + 22L * 60_000L + 15_000L)
+
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", apertura)
+        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", primerPesaje)
+        repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", sellado)
+
+        val retencion = bitacoraDao.items.firstOrNull {
+            it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION
+        }
+        assertNotNull(retencion)
+        assertEquals(sellado, retencion!!.fechaHora)
+        // Debe medir 22 min 15 s (desde primerPesaje), no 32 min 15 s (desde apertura)
+        assertTrue(retencion.detalle.contains("22 min 15 s"))
+    }
+
+    @Test
+    fun `al sellar anticipadamente registra en bitacora el tiempo total de retencion o cero sin pesajes`() = runBlocking {
+        val apertura = Date(1_700_000_000_000L)
+        val primerPesaje = Date(apertura.time + 5L * 60_000L)
+        val sellado = Date(primerPesaje.time + 15L * 60_000L + 30_000L)
+
+        val conPesaje = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", apertura)
+        repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", primerPesaje)
+        repository.sellarAnticipadamente(conPesaje.id, "Cierre de lote", sellado)
+
+        val logConPesaje = bitacoraDao.items.firstOrNull {
+            it.parihuelaId == conPesaje.id && it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION
+        }
+        assertNotNull(logConPesaje)
+        assertTrue(logConPesaje!!.detalle.contains("15 min 30 s"))
+
+        // Parihuela sellada anticipadamente sin ningun pesaje previo
+        val sinPesaje = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", apertura)
+        repository.sellarAnticipadamente(sinPesaje.id, "No se utilizó", Date(apertura.time + 60_000L))
+
+        val logSinPesaje = bitacoraDao.items.firstOrNull {
+            it.parihuelaId == sinPesaje.id && it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION
+        }
+        assertNotNull(logSinPesaje)
+        assertTrue(logSinPesaje!!.detalle.contains("0 min 0 s"))
+    }
+
+    @Test
+    fun `alerta de tiempo fallida no se marca como enviada, registra intento y reintenta al recuperar permiso`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, 10.0, "Biloxi", "Cuartel 01", inicio)
+
+        val enPorVencer = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - 3 * 60_000L)
+        val sinPermiso = { _: ParihuelaEntity, _: EstadoTiempoEspera ->
+            NotificacionTiempoUtil.ResultadoNotificacion(
+                mostrada = false,
+                motivoFallo = "Permiso POST_NOTIFICATIONS no concedido"
+            )
+        }
+
+        // Primer intento falla: NO debe registrar ALERTA_POR_VENCER ni devolverla como notificada
+        val resultadoFallido = repository.evaluarAlertasTiempo(enPorVencer, sinPermiso)
+        assertTrue(resultadoFallido.isEmpty())
+        assertFalse(bitacoraDao.existeEvento(parihuela.id, ParihuelaRepository.EVENTO_ALERTA_POR_VENCER))
+        val intentosFallidos = bitacoraDao.items.filter {
+            it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_INTENTO_ALERTA_FALLIDA
+        }
+        assertEquals(1, intentosFallidos.size)
+        assertTrue(intentosFallidos.first().detalle.contains("POST_NOTIFICATIONS"))
+
+        // Reintento cuando ya hay permiso: ahora si notifica y registra ALERTA_POR_VENCER una vez
+        val reintentoExitoso = repository.evaluarAlertasTiempo(
+            Date(enPorVencer.time + 15_000L)
+        ) { _, _ -> NotificacionTiempoUtil.ResultadoNotificacion(mostrada = true) }
+        assertEquals(listOf(parihuela.id), reintentoExitoso.map { it.id })
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_ALERTA_POR_VENCER
+            }
+        )
+
+        // También aplica para EXCEDIDA si falla primero y luego se recupera
+        val enExcedida = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
+        assertTrue(repository.evaluarAlertasTiempo(enExcedida, sinPermiso).isEmpty())
+        assertFalse(bitacoraDao.existeEvento(parihuela.id, ParihuelaRepository.EVENTO_RETENCION_EXCEDIDA))
+        assertEquals(
+            listOf(parihuela.id),
+            repository.evaluarAlertasTiempo(enExcedida) { _, _ ->
+                NotificacionTiempoUtil.ResultadoNotificacion(mostrada = true)
+            }.map { it.id }
+        )
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_RETENCION_EXCEDIDA
+            }
+        )
+    }
+
+    @Test
+    fun `generarCodigoUnico deriva secuencia de la base sin colisionar tras reinicio con mismo timestamp`() = runBlocking {
+        val mismoInstante = Date(1_700_000_000_000L)
+        val primera = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", mismoInstante)
+        repository.sellarAnticipadamente(primera.id, "Lote completo", mismoInstante)
+
+        // Nueva instancia simulando reinicio de app sobre los mismos DAOs
+        val repoTrasReinicio = ParihuelaRepository(
+            parihuelaDao = parihuelaDao,
+            bitacoraDao = bitacoraDao,
+            incidenciaDao = incidenciaDao,
+            pesajeDao = pesajeDao,
+            reasignacionDao = reasignacionDao
+        )
+        val segunda = repoTrasReinicio.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", mismoInstante)
+        assertNotEquals(primera.codigo, segunda.codigo)
+        assertTrue(segunda.codigo.endsWith("-0002"))
+    }
+
+    @Test
+    fun `evaluarAlertasTiempo concurrente entre multiples repositorios notifica una sola vez`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
+        repository.registrarPesaje("Juan Perez", 5, 10.0, "Biloxi", "Cuartel 01", inicio)
+        val enPorVencer = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - 2 * 60_000L)
+
+        val repoWorkerExacto = ParihuelaRepository(parihuelaDao, bitacoraDao, incidenciaDao, pesajeDao, reasignacionDao = reasignacionDao)
+        val repoWorkerPeriodico = ParihuelaRepository(parihuelaDao, bitacoraDao, incidenciaDao, pesajeDao, reasignacionDao = reasignacionDao)
+
+        val resultados = coroutineScope {
+            listOf(
+                async { repoWorkerExacto.evaluarAlertasTiempo(enPorVencer) },
+                async { repoWorkerPeriodico.evaluarAlertasTiempo(enPorVencer) }
+            ).awaitAll()
+        }
+
+        val totalAvisos = resultados.sumOf { it.size }
+        assertEquals(1, totalAvisos)
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_ALERTA_POR_VENCER
+            }
+        )
+    }
+
+    @Test
+    fun `parihuela autoabierta al sellar 120 nace sin cronometro y lo inicia en su primer pesaje`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val primera = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        val sellado = repository.registrarPesaje("Juan Perez", 120, 240.0, "Biloxi", "Cuartel 01", t0)
+            as ResultadoPesaje.Registrado
+        val segunda = sellado.resultadoJabas.nuevaParihuela!!
+
+        assertNull(segunda.horaInicio)
+        assertFalse(repository.calcularTiempoEspera(segunda, Date(t0.time + 60L * 60_000L)).cronometroIniciado)
+
+        val tPrimerPesajeSegunda = Date(t0.time + 20L * 60_000L)
+        val resSegunda = repository.registrarPesaje(
+            "Juan Perez",
+            10,
+            20.0,
+            "Biloxi",
+            "Cuartel 01",
+            tPrimerPesajeSegunda
+        ) as ResultadoPesaje.Registrado
+
+        assertTrue(resSegunda.resultadoJabas.cronometroIniciadoEnEstePesaje)
+        assertEquals(tPrimerPesajeSegunda, resSegunda.resultadoJabas.parihuela.horaInicio)
+        assertNotEquals(primera.id, resSegunda.resultadoJabas.parihuela.id)
+    }
+
+    @Test
+    fun `daos falsos aplican unicidad de codigo, claves foraneas, orden DESC y flows reactivos`() = runBlocking {
+        val t1 = Date(1_700_000_000_000L)
+        val t2 = Date(1_700_000_060_000L)
+        val id = parihuelaDao.insert(
+            ParihuelaEntity(codigo = "PAR-UNICO", variedad = "Biloxi", cuartel = "Cuartel 01", clp = "CLP-01", cuadrilla = "CUA-01")
+        )
+
+        // Unicidad de codigo
+        try {
+            parihuelaDao.insert(
+                ParihuelaEntity(codigo = "PAR-UNICO", variedad = "Biloxi", cuartel = "Cuartel 01", clp = "CLP-01", cuadrilla = "CUA-01")
+            )
+            fail("Debió rechazar código duplicado")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        // Claves foraneas en bitacora, incidencias y pesajes
+        try {
+            bitacoraDao.insert(BitacoraEntity(parihuelaId = 9999L, evento = "TEST", detalle = "huerfano", fechaHora = t1))
+            fail("Debió rechazar bitácora sin parihuela padre")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+        try {
+            incidenciaDao.insert(IncidenciaEntity(parihuelaId = 9999L, tipo = "TEST", detalle = "huerfano", fechaHora = t1))
+            fail("Debió rechazar incidencia sin parihuela padre")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+        try {
+            pesajeDao.insert(PesajeEntity(parihuelaId = 9999L, jornalero = "X", cantidadJabas = 1, pesoKg = 2.0, fechaHora = t1))
+            fail("Debió rechazar pesaje sin parihuela padre")
+        } catch (expected: IllegalStateException) {
+            // Esperado
+        }
+
+        // Orden DESC y reactividad real
+        bitacoraDao.insert(BitacoraEntity(parihuelaId = id, evento = "E1", detalle = "primero", fechaHora = t1))
+        bitacoraDao.insert(BitacoraEntity(parihuelaId = id, evento = "E2", detalle = "segundo", fechaHora = t2))
+        val ordenBitacora = bitacoraDao.observeByParihuela(id).first()
+        assertEquals(listOf("E2", "E1"), ordenBitacora.map { it.evento })
+
+        val emisiones = mutableListOf<List<PesajeEntity>>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            pesajeDao.observeByParihuela(id).take(2).toList(emisiones)
+        }
+        pesajeDao.insert(PesajeEntity(parihuelaId = id, jornalero = "Ana", cantidadJabas = 2, pesoKg = 4.0, fechaHora = t1))
+        withTimeout(5_000L) {
+            collector.join()
+        }
+        assertEquals(2, emisiones.size)
+        assertEquals(0, emisiones[0].size)
+        assertEquals(1, emisiones[1].size)
+    }
+
     private class FakeParihuelaDao : ParihuelaDao {
         private var seq = 0L
         private val data = linkedMapOf<Long, ParihuelaEntity>()
+        private val cambios = MutableStateFlow(0L)
+
+        fun existe(id: Long): Boolean = data.containsKey(id)
 
         override suspend fun insert(parihuela: ParihuelaEntity): Long {
+            check(data.values.none { it.codigo == parihuela.codigo }) {
+                "UNIQUE constraint failed: parihuelas.codigo"
+            }
             val id = ++seq
             data[id] = parihuela.copy(id = id)
+            cambios.value++
             return id
         }
 
         override suspend fun update(parihuela: ParihuelaEntity) {
+            if (!data.containsKey(parihuela.id)) return
+            check(data.values.none { it.id != parihuela.id && it.codigo == parihuela.codigo }) {
+                "UNIQUE constraint failed: parihuelas.codigo"
+            }
             data[parihuela.id] = parihuela
+            cambios.value++
         }
 
         override suspend fun getById(id: Long): ParihuelaEntity? = data[id]
@@ -1141,32 +1397,41 @@ class ParihuelaRepositoryTest {
         override suspend fun getByCodigo(codigo: String): ParihuelaEntity? =
             data.values.firstOrNull { it.codigo == codigo }
 
+        override suspend fun obtenerMaxId(): Long = data.keys.maxOrNull() ?: 0L
+
         override fun observeByEstado(estado: EstadoParihuela): Flow<List<ParihuelaEntity>> =
-            flowOf(
+            cambios.map {
                 data.values
                     .filter { it.estado == estado }
                     .sortedWith(
                         compareByDescending<ParihuelaEntity> { it.horaInicio?.time ?: 0L }
                             .thenByDescending { it.id }
                     )
-            )
+            }
 
         override fun observeAll(): Flow<List<ParihuelaEntity>> =
-            flowOf(
+            cambios.map {
                 data.values.sortedWith(
                     compareByDescending<ParihuelaEntity> { it.horaInicio?.time ?: 0L }
                         .thenByDescending { it.id }
                 )
-            )
+            }
     }
 
-    private class FakeBitacoraDao : BitacoraDao {
+    private class FakeBitacoraDao(
+        private val existeParihuela: (Long) -> Boolean
+    ) : BitacoraDao {
         private var seq = 0L
         val items = mutableListOf<BitacoraEntity>()
+        private val cambios = MutableStateFlow(0L)
 
         override suspend fun insert(bitacora: BitacoraEntity): Long {
+            check(existeParihuela(bitacora.parihuelaId)) {
+                "FOREIGN KEY constraint failed: bitacora.parihuela_id=${bitacora.parihuelaId}"
+            }
             val id = ++seq
             items.add(bitacora.copy(id = id))
+            cambios.value++
             return id
         }
 
@@ -1174,70 +1439,109 @@ class ParihuelaRepositoryTest {
             items.any { it.parihuelaId == parihuelaId && it.evento == evento }
 
         override fun observeByParihuela(parihuelaId: Long): Flow<List<BitacoraEntity>> =
-            flowOf(items.filter { it.parihuelaId == parihuelaId })
+            cambios.map {
+                items.filter { it.parihuelaId == parihuelaId }
+                    .sortedByDescending { it.fechaHora.time }
+            }
 
-        override fun observeAll(): Flow<List<BitacoraEntity>> = flowOf(items.toList())
+        override fun observeAll(): Flow<List<BitacoraEntity>> =
+            cambios.map { items.sortedByDescending { it.fechaHora.time } }
     }
 
-    private class FakeIncidenciaDao : IncidenciaDao {
+    private class FakeIncidenciaDao(
+        private val existeParihuela: (Long) -> Boolean
+    ) : IncidenciaDao {
         private var seq = 0L
         val items = mutableListOf<IncidenciaEntity>()
+        private val cambios = MutableStateFlow(0L)
 
         override suspend fun insert(incidencia: IncidenciaEntity): Long {
+            check(existeParihuela(incidencia.parihuelaId)) {
+                "FOREIGN KEY constraint failed: incidencias.parihuela_id=${incidencia.parihuelaId}"
+            }
             val id = ++seq
             items.add(incidencia.copy(id = id))
+            cambios.value++
             return id
         }
 
         override suspend fun update(incidencia: IncidenciaEntity) {
             val idx = items.indexOfFirst { it.id == incidencia.id }
-            if (idx >= 0) items[idx] = incidencia
+            if (idx >= 0) {
+                items[idx] = incidencia
+                cambios.value++
+            }
         }
 
         override suspend fun getById(id: Long): IncidenciaEntity? =
             items.firstOrNull { it.id == id }
 
         override fun observeByParihuela(parihuelaId: Long): Flow<List<IncidenciaEntity>> =
-            flowOf(items.filter { it.parihuelaId == parihuelaId })
+            cambios.map {
+                items.filter { it.parihuelaId == parihuelaId }
+                    .sortedByDescending { it.fechaHora.time }
+            }
 
-        override fun observeAll(): Flow<List<IncidenciaEntity>> = flowOf(items.toList())
+        override fun observeAll(): Flow<List<IncidenciaEntity>> =
+            cambios.map { items.sortedByDescending { it.fechaHora.time } }
     }
 
-    private class FakePesajeDao : PesajeDao {
+    private class FakePesajeDao(
+        private val existeParihuela: (Long) -> Boolean
+    ) : PesajeDao {
         private var seq = 0L
         val items = mutableListOf<PesajeEntity>()
+        private val cambios = MutableStateFlow(0L)
 
         override suspend fun insert(pesaje: PesajeEntity): Long {
+            check(existeParihuela(pesaje.parihuelaId)) {
+                "FOREIGN KEY constraint failed: pesajes.parihuela_id=${pesaje.parihuelaId}"
+            }
             val id = ++seq
             items.add(pesaje.copy(id = id))
+            cambios.value++
             return id
         }
 
         override suspend fun update(pesaje: PesajeEntity) {
             val idx = items.indexOfFirst { it.id == pesaje.id }
-            if (idx >= 0) items[idx] = pesaje
+            if (idx >= 0) {
+                items[idx] = pesaje
+                cambios.value++
+            }
         }
 
         override suspend fun getById(id: Long): PesajeEntity? = items.firstOrNull { it.id == id }
 
         override fun observeByParihuela(parihuelaId: Long): Flow<List<PesajeEntity>> =
-            flowOf(items.filter { it.parihuelaId == parihuelaId })
+            cambios.map {
+                items.filter { it.parihuelaId == parihuelaId }
+                    .sortedByDescending { it.fechaHora.time }
+            }
 
-        override fun observeAll(): Flow<List<PesajeEntity>> = flowOf(items.toList())
+        override fun observeAll(): Flow<List<PesajeEntity>> =
+            cambios.map { items.sortedByDescending { it.fechaHora.time } }
     }
 
     private class FakeReasignacionDao : ReasignacionDao {
         private var seq = 0L
         val items = mutableListOf<ReasignacionEntity>()
+        private val cambios = MutableStateFlow(0L)
 
         override suspend fun insert(reasignacion: ReasignacionEntity): Long {
             val id = ++seq
             items.add(reasignacion.copy(id = id))
+            cambios.value++
             return id
         }
 
         override fun observeAll(): Flow<List<ReasignacionEntity>> =
-            flowOf(items.sortedWith(compareByDescending<ReasignacionEntity> { it.hora.time }.thenByDescending { it.id }))
+            cambios.map {
+                items.sortedWith(
+                    compareByDescending<ReasignacionEntity> { it.hora.time }
+                        .thenByDescending { it.id }
+                )
+            }
 
         override suspend fun getUltimaPorJornalero(jornalero: String): ReasignacionEntity? =
             items.filter { it.jornalero.equals(jornalero, ignoreCase = true) }

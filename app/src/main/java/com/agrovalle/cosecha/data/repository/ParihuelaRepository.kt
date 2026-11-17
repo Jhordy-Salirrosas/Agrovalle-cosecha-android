@@ -13,6 +13,7 @@ import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
+import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.util.QrUtil
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -22,7 +23,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.Date
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Almacén del cuartel actual asignado a cada jornalero.
@@ -240,7 +240,6 @@ class ParihuelaRepository(
 
     companion object {
         private val mutexTransaccion = Mutex()
-        private val secuenciaCodigo = AtomicInteger(0)
 
         const val LIMITE_JABAS = 120
         const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
@@ -250,6 +249,8 @@ class ParihuelaRepository(
         const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
         const val EVENTO_ALERTA_POR_VENCER = "ALERTA_POR_VENCER"
         const val EVENTO_RETENCION_EXCEDIDA = "RETENCION_EXCEDIDA"
+        const val EVENTO_INTENTO_ALERTA_FALLIDA = "INTENTO_ALERTA_FALLIDA"
+        const val EVENTO_TIEMPO_RETENCION = "TIEMPO_RETENCION_TOTAL"
         const val EVENTO_RETENIDA_CALIDAD = "RETENIDA_CALIDAD"
         const val EVENTO_LIBERACION_CALIDAD = "LIBERACION_CALIDAD"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
@@ -304,6 +305,23 @@ class ParihuelaRepository(
         fun calcularDemoraAlertaExactaMs(horaInicio: Date, ahora: Date = Date()): Long {
             val momentoAlerta = horaInicio.time + LIMITE_ESPERA_MS - UMBRAL_POR_VENCER_MS
             return (momentoAlerta - ahora.time).coerceAtLeast(0L)
+        }
+
+        /**
+         * Calcula el tiempo total de retención transcurrido desde el primer pesaje
+         * ([horaInicio]) hasta el sellado ([horaSellado]). Devuelve 0 ms si no hubo pesajes.
+         */
+        fun calcularTiempoRetencionTotalMs(horaInicio: Date?, horaSellado: Date): Long {
+            if (horaInicio == null) return 0L
+            return (horaSellado.time - horaInicio.time).coerceAtLeast(0L)
+        }
+
+        /** Formatea la duración total de retención en minutos y segundos legibles. */
+        fun formatearDuracionRetencion(duracionMs: Long): String {
+            val totalSeg = duracionMs.coerceAtLeast(0L) / 1000L
+            val minutos = totalSeg / 60L
+            val segundos = totalSeg % 60L
+            return "$minutos min $segundos s"
         }
     }
 
@@ -500,6 +518,7 @@ class ParihuelaRepository(
                     fechaHora = ahora
                 )
             )
+            registrarTiempoRetencionTotalAlSellar(sellada, ahora)
 
             val siguiente = abrirNuevaParihuelaInterno(
                 variedad = actual.variedad,
@@ -578,8 +597,30 @@ class ParihuelaRepository(
                 fechaHora = ahora
             )
         )
+        registrarTiempoRetencionTotalAlSellar(sellada, ahora)
 
         return@enTransaccionAtomica sellada
+    }
+
+    private suspend fun registrarTiempoRetencionTotalAlSellar(
+        parihuela: ParihuelaEntity,
+        horaSellado: Date
+    ) {
+        val inicio = parihuela.horaInicio
+        val totalMs = calcularTiempoRetencionTotalMs(inicio, horaSellado)
+        val detalle = if (inicio == null) {
+            "Tiempo total de retención: ${formatearDuracionRetencion(totalMs)} (sin pesajes previos al sellado)"
+        } else {
+            "Tiempo total de retención: ${formatearDuracionRetencion(totalMs)} (${totalMs / 60_000L} min, $totalMs ms desde primer pesaje hasta sellado)"
+        }
+        bitacoraDao.insert(
+            BitacoraEntity(
+                parihuelaId = parihuela.id,
+                evento = EVENTO_TIEMPO_RETENCION,
+                detalle = detalle,
+                fechaHora = horaSellado
+            )
+        )
     }
 
     private suspend fun registrarRetencionExcedidaSiCorresponde(
@@ -1131,58 +1172,99 @@ class ParihuelaRepository(
     }
 
     /**
-     * Evalúa las parihuelas abiertas de forma atómica y decide cuáles deben disparar
-     * notificación POR_VENCER (una sola vez) y cuáles deben marcar RETENCION_EXCEDIDA (una sola vez).
+     * Evalúa las parihuelas abiertas de forma atómica e intenta mostrar las notificaciones
+     * correspondientes (POR_VENCER o RETENCION_EXCEDIDA, una sola vez exitosa).
+     * Si la notificación no pudo mostrarse (ej. sin permiso), NO marca la alerta como
+     * mostrada para permitir reintentos y registra [EVENTO_INTENTO_ALERTA_FALLIDA].
      */
-    suspend fun evaluarAlertasTiempo(ahora: Date = Date()): List<ParihuelaEntity> = enTransaccionAtomica {
+    suspend fun evaluarAlertasTiempo(
+        ahora: Date = Date(),
+        onNotificarAlerta: (
+            parihuela: ParihuelaEntity,
+            estado: EstadoTiempoEspera
+        ) -> NotificacionTiempoUtil.ResultadoNotificacion = { _, _ ->
+            NotificacionTiempoUtil.ResultadoNotificacion(mostrada = true)
+        }
+    ): List<ParihuelaEntity> = enTransaccionAtomica {
         val abiertas = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first()
-        val porNotificar = mutableListOf<ParihuelaEntity>()
+        val notificadas = mutableListOf<ParihuelaEntity>()
 
         for (parihuela in abiertas) {
             if (parihuela.horaInicio == null) continue
             val tiempo = calcularTiempoEspera(parihuela, ahora)
-            when (tiempo.estado) {
-                EstadoTiempoEspera.EN_ESPERA -> Unit
-                EstadoTiempoEspera.POR_VENCER -> {
-                    val yaAvisada = bitacoraDao.existeEvento(parihuela.id, EVENTO_ALERTA_POR_VENCER)
-                    if (!yaAvisada) {
-                        bitacoraDao.insert(
-                            BitacoraEntity(
-                                parihuelaId = parihuela.id,
-                                evento = EVENTO_ALERTA_POR_VENCER,
-                                detalle = "Alerta de tiempo por vencer (${tiempo.restanteMs / 60_000L} min restantes)",
-                                fechaHora = ahora
-                            )
-                        )
-                        porNotificar.add(parihuela)
-                    }
-                }
+            val resultado = when (tiempo.estado) {
+                EstadoTiempoEspera.EN_ESPERA -> false
+                EstadoTiempoEspera.POR_VENCER -> intentarRegistrarAlerta(
+                    parihuela = parihuela,
+                    estado = tiempo.estado,
+                    eventoExito = EVENTO_ALERTA_POR_VENCER,
+                    detalleExito = "Alerta de tiempo por vencer (${tiempo.restanteMs / 60_000L} min restantes)",
+                    ahora = ahora,
+                    onNotificarAlerta = onNotificarAlerta
+                )
 
-                EstadoTiempoEspera.EXCEDIDA -> {
-                    val yaMarcada = bitacoraDao.existeEvento(parihuela.id, EVENTO_RETENCION_EXCEDIDA)
-                    if (!yaMarcada) {
-                        bitacoraDao.insert(
-                            BitacoraEntity(
-                                parihuelaId = parihuela.id,
-                                evento = EVENTO_RETENCION_EXCEDIDA,
-                                detalle = "Retención de tiempo excedida para parihuela ${parihuela.codigo}",
-                                fechaHora = ahora
-                            )
-                        )
-                        porNotificar.add(parihuela)
-                    }
-                }
+                EstadoTiempoEspera.EXCEDIDA -> intentarRegistrarAlerta(
+                    parihuela = parihuela,
+                    estado = tiempo.estado,
+                    eventoExito = EVENTO_RETENCION_EXCEDIDA,
+                    detalleExito = "Retención de tiempo excedida para parihuela ${parihuela.codigo}",
+                    ahora = ahora,
+                    onNotificarAlerta = onNotificarAlerta
+                )
+            }
+            if (resultado) {
+                notificadas.add(parihuela)
             }
         }
-        return@enTransaccionAtomica porNotificar
+        return@enTransaccionAtomica notificadas
+    }
+
+    private suspend fun intentarRegistrarAlerta(
+        parihuela: ParihuelaEntity,
+        estado: EstadoTiempoEspera,
+        eventoExito: String,
+        detalleExito: String,
+        ahora: Date,
+        onNotificarAlerta: (
+            parihuela: ParihuelaEntity,
+            estado: EstadoTiempoEspera
+        ) -> NotificacionTiempoUtil.ResultadoNotificacion
+    ): Boolean {
+        if (bitacoraDao.existeEvento(parihuela.id, eventoExito)) return false
+
+        val resultadoNotificacion = onNotificarAlerta(parihuela, estado)
+        if (resultadoNotificacion.mostrada) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = parihuela.id,
+                    evento = eventoExito,
+                    detalle = detalleExito,
+                    fechaHora = ahora
+                )
+            )
+            return true
+        }
+
+        val motivo = resultadoNotificacion.motivoFallo?.takeIf { it.isNotBlank() }
+            ?: "Notificación no disponible"
+        bitacoraDao.insert(
+            BitacoraEntity(
+                parihuelaId = parihuela.id,
+                evento = EVENTO_INTENTO_ALERTA_FALLIDA,
+                detalle = "Intento fallido ($eventoExito) para ${parihuela.codigo}: $motivo; pendiente de reintento",
+                fechaHora = ahora
+            )
+        )
+        return false
     }
 
     private suspend fun generarCodigoUnico(ahora: Date): String {
-        var codigo: String
-        do {
-            val seq = secuenciaCodigo.incrementAndGet()
+        var seq = parihuelaDao.obtenerMaxId() + 1L
+        var codigo = "PAR-${ahora.time}-${seq.toString().padStart(4, '0')}"
+        while (parihuelaDao.getByCodigo(codigo) != null) {
+            seq++
             codigo = "PAR-${ahora.time}-${seq.toString().padStart(4, '0')}"
-        } while (parihuelaDao.getByCodigo(codigo) != null)
+        }
         return codigo
     }
 }

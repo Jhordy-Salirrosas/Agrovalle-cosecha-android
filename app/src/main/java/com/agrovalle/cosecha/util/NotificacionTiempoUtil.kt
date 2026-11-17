@@ -17,6 +17,11 @@ import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
  */
 object NotificacionTiempoUtil {
 
+    data class ResultadoNotificacion(
+        val mostrada: Boolean,
+        val motivoFallo: String? = null
+    )
+
     const val CANAL_ID = "canal_alerta_parihuela"
     private const val CANAL_NOMBRE = "Alertas de Tiempo de Parihuela"
 
@@ -35,47 +40,82 @@ object NotificacionTiempoUtil {
         }
     }
 
-    fun mostrarAlertaPorVencer(context: Context, parihuela: ParihuelaEntity) {
-        crearCanal(context)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permiso = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-            if (permiso != PackageManager.PERMISSION_GRANTED) return
+    /** Verifica permiso en Android 13+ y estado general de notificaciones del sistema. */
+    internal fun evaluarDisponibilidadNotificacion(
+        sdkInt: Int,
+        permisoPostNotificationsConcedido: Boolean,
+        notificacionesHabilitadasSistema: Boolean
+    ): String? {
+        if (sdkInt >= Build.VERSION_CODES.TIRAMISU && !permisoPostNotificationsConcedido) {
+            return "Permiso POST_NOTIFICATIONS no concedido"
         }
-
-        val notification = NotificationCompat.Builder(context, CANAL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Parihuela por vencer: ${parihuela.codigo}")
-            .setContentText("Quedan 5 minutos o menos (${parihuela.variedad} - ${parihuela.cuartel}).")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setAutoCancel(true)
-            .build()
-
-        NotificationManagerCompat.from(context).notify(parihuela.id.toInt(), notification)
+        if (!notificacionesHabilitadasSistema) {
+            return "Notificaciones deshabilitadas en el sistema"
+        }
+        return null
     }
 
-    fun mostrarAlertaRetencionExcedida(context: Context, parihuela: ParihuelaEntity) {
+    fun mostrarAlertaPorVencer(context: Context, parihuela: ParihuelaEntity): ResultadoNotificacion =
+        enviarNotificacion(
+            context = context,
+            notificacionId = parihuela.id.toInt(),
+            titulo = "Parihuela por vencer: ${parihuela.codigo}",
+            contenido = "Quedan 5 minutos o menos (${parihuela.variedad} - ${parihuela.cuartel})."
+        )
+
+    fun mostrarAlertaRetencionExcedida(
+        context: Context,
+        parihuela: ParihuelaEntity
+    ): ResultadoNotificacion =
+        enviarNotificacion(
+            context = context,
+            notificacionId = 10_000 + parihuela.id.toInt(),
+            titulo = "Retención excedida: ${parihuela.codigo}",
+            contenido = "La parihuela superó el tiempo máximo de espera (${parihuela.variedad} - ${parihuela.cuartel})."
+        )
+
+    private fun enviarNotificacion(
+        context: Context,
+        notificacionId: Int,
+        titulo: String,
+        contenido: String
+    ): ResultadoNotificacion {
         crearCanal(context)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permiso = ContextCompat.checkSelfPermission(
+        val permisoConcedido = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
-            )
-            if (permiso != PackageManager.PERMISSION_GRANTED) return
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        val manager = NotificationManagerCompat.from(context)
+        val motivoBloqueo = evaluarDisponibilidadNotificacion(
+            sdkInt = Build.VERSION.SDK_INT,
+            permisoPostNotificationsConcedido = permisoConcedido,
+            notificacionesHabilitadasSistema = manager.areNotificationsEnabled()
+        )
+        if (motivoBloqueo != null) {
+            return ResultadoNotificacion(mostrada = false, motivoFallo = motivoBloqueo)
         }
 
         val notification = NotificationCompat.Builder(context, CANAL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Retención excedida: ${parihuela.codigo}")
-            .setContentText("La parihuela superó el tiempo máximo de espera (${parihuela.variedad} - ${parihuela.cuartel}).")
+            .setContentTitle(titulo)
+            .setContentText(contenido)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .build()
 
-        NotificationManagerCompat.from(context).notify(10_000 + parihuela.id.toInt(), notification)
+        return try {
+            manager.notify(notificacionId, notification)
+            ResultadoNotificacion(mostrada = true)
+        } catch (se: SecurityException) {
+            ResultadoNotificacion(
+                mostrada = false,
+                motivoFallo = se.message ?: "SecurityException al mostrar notificación"
+            )
+        }
     }
 }
