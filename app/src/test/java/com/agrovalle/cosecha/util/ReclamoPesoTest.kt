@@ -60,10 +60,10 @@ class ReclamoPesoTest {
             )
         )
 
-        // Nuevo bruto 9.515 - tara (4 * 0.375 = 1.500) = 8.015 kg (+15 g <= 20 g)
+        // Nuevo bruto 9.51 - tara (4 * 0.375 = 1.50) = 8.01 kg (+10 g <= 20 g)
         val resultado = DatosMemoria.registrarReclamoPeso(
             pesajeOriginalId = original.id,
-            nuevoPesoBrutoKg = 9.515,
+            nuevoPesoBrutoKg = 9.51,
             taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
             fecha = "2026-11-17",
             hora = "10:15:00",
@@ -85,7 +85,7 @@ class ReclamoPesoTest {
         assertEquals(jornalero.nombreCompleto, reg.jornaleroNombre)
         assertEquals(original.id, reg.pesajeOriginalId)
         assertEquals(8.00, reg.pesoOriginalNetoKg, 0.0001)
-        assertEquals(15.0, reg.diferenciaGramos, 0.001)
+        assertEquals(10.0, reg.diferenciaGramos, 0.001)
         assertEquals(EstadoReclamoPeso.DENTRO_TOLERANCIA, reg.estado)
         assertNull(reg.pesajeCompensatorioId)
     }
@@ -193,5 +193,165 @@ class ReclamoPesoTest {
         assertEquals("QR_CAPATAZ_001", reg.codigoQrCapataz)
         assertEquals("Carlos Mendez (Capataz)", reg.capatazAutorizador)
         assertEquals(EstadoReclamoPeso.COMPENSADO, reg.estado)
+    }
+
+    @Test
+    fun `segundo compensatorio sobre el mismo pesaje original es rechazado sin guardar nada`() {
+        val jornalero = DatosMemoria.listaJornaleros.first()
+        val original = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 4,
+                pesoBruto = 9.50,
+                taraTotal = 1.50,
+                pesoNeto = 8.00
+            )
+        )
+
+        DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = original.id,
+            nuevoPesoBrutoKg = 9.85,
+            taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
+            codigoQrCapataz = "QR_CAPATAZ_001"
+        )
+        assertEquals(2, DatosMemoria.pesajes.size)
+        assertEquals(1, DatosMemoria.obtenerBitacoraReclamos().size)
+
+        try {
+            DatosMemoria.registrarReclamoPeso(
+                pesajeOriginalId = original.id,
+                nuevoPesoBrutoKg = 9.95,
+                taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
+                codigoQrCapataz = "QR_CAPATAZ_001"
+            )
+            fail("Debió rechazar un segundo reclamo compensatorio sobre el mismo pesaje")
+        } catch (expected: IllegalStateException) {
+            assertTrue(expected.message!!.contains("ya tiene un reclamo compensatorio"))
+        }
+
+        assertEquals(2, DatosMemoria.pesajes.size)
+        assertEquals(1, DatosMemoria.obtenerBitacoraReclamos().size)
+    }
+
+    @Test
+    fun `reclamo con peso bruto menor o igual a la tara total es rechazado sin guardar nada`() {
+        val jornalero = DatosMemoria.listaJornaleros.first()
+        val original = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 4,
+                pesoBruto = 9.50,
+                taraTotal = 1.50,
+                pesoNeto = 8.00
+            )
+        )
+
+        // Bruto exactamente igual a la tara total (1.50 kg)
+        try {
+            DatosMemoria.registrarReclamoPeso(
+                pesajeOriginalId = original.id,
+                nuevoPesoBrutoKg = 1.50,
+                taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
+                codigoQrCapataz = "QR_CAPATAZ_001"
+            )
+            fail("Debió rechazar bruto igual a la tara total")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("tara total"))
+        }
+
+        // Bruto menor que la tara total (1.20 kg < 1.50 kg)
+        try {
+            DatosMemoria.registrarReclamoPeso(
+                pesajeOriginalId = original.id,
+                nuevoPesoBrutoKg = 1.20,
+                taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
+                codigoQrCapataz = "QR_CAPATAZ_001"
+            )
+            fail("Debió rechazar bruto menor a la tara total")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("tara total"))
+        }
+
+        assertEquals(1, DatosMemoria.pesajes.size)
+        assertTrue(DatosMemoria.obtenerBitacoraReclamos().isEmpty())
+    }
+
+    @Test
+    fun `diferencia negativa dentro de tolerancia mantiene el pesaje original sin compensatorio`() {
+        val jornalero = DatosMemoria.listaJornaleros.first()
+        val original = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 4,
+                pesoBruto = 9.50,
+                taraTotal = 1.50,
+                pesoNeto = 8.00
+            )
+        )
+
+        // Nuevo bruto 9.48 - tara 1.50 = 7.98 kg (-20 g, dentro de la tolerancia de 20 g)
+        val resultado = DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = original.id,
+            nuevoPesoBrutoKg = 9.48,
+            taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
+            codigoQrCapataz = null
+        )
+
+        assertTrue(resultado is DatosMemoria.ResultadoRegistroReclamo.DentroDeTolerancia)
+        assertEquals(1, DatosMemoria.pesajes.size)
+        val reg = DatosMemoria.obtenerBitacoraReclamos().single()
+        assertEquals(EstadoReclamoPeso.DENTRO_TOLERANCIA, reg.estado)
+        assertFalse(reg.excedeTolerancia)
+        assertEquals(-20.0, reg.diferenciaGramos, 0.001)
+        assertEquals(20.0, reg.diferenciaAbsolutaGramos, 0.001)
+        assertNull(reg.pesajeCompensatorioId)
+    }
+
+    @Test
+    fun `repesaje identico con 3 jabas y con 5 jabas da diferencia cero`() {
+        val jornalero = DatosMemoria.listaJornaleros.first()
+        val tara = Constantes.TARA_POR_DEFECTO // 0.375 kg/jaba
+
+        // 3 jabas: tara = 1.125 -> 1.13; neto = 9.50 - 1.13 = 8.37
+        val tara3 = CalculadoraPesaje.calcularTaraTotal(3, tara)
+        val neto3 = CalculadoraPesaje.calcularPesoNeto(9.50, 3, tara)
+        val orig3 = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 3,
+                pesoBruto = 9.50,
+                taraTotal = tara3,
+                pesoNeto = neto3
+            )
+        )
+        val res3 = DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = orig3.id,
+            nuevoPesoBrutoKg = 9.50,
+            taraPorJabaKg = tara
+        ) as DatosMemoria.ResultadoRegistroReclamo.DentroDeTolerancia
+        assertEquals(0.0, res3.reclamo.diferenciaGramos, 0.001)
+        assertEquals(0.0, res3.reclamo.diferenciaKg, 0.0001)
+        assertEquals(tara3, res3.reclamo.taraAplicadaKg, 0.0001)
+
+        // 5 jabas: tara = 1.875 -> 1.88; neto = 12.30 - 1.88 = 10.42
+        val tara5 = CalculadoraPesaje.calcularTaraTotal(5, tara)
+        val neto5 = CalculadoraPesaje.calcularPesoNeto(12.30, 5, tara)
+        val orig5 = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 5,
+                pesoBruto = 12.30,
+                taraTotal = tara5,
+                pesoNeto = neto5
+            )
+        )
+        val res5 = DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = orig5.id,
+            nuevoPesoBrutoKg = 12.30,
+            taraPorJabaKg = tara
+        ) as DatosMemoria.ResultadoRegistroReclamo.DentroDeTolerancia
+        assertEquals(0.0, res5.reclamo.diferenciaGramos, 0.001)
+        assertEquals(0.0, res5.reclamo.diferenciaKg, 0.0001)
+        assertEquals(tara5, res5.reclamo.taraAplicadaKg, 0.0001)
     }
 }
