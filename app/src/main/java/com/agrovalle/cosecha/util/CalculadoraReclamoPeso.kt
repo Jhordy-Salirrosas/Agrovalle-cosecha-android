@@ -1,5 +1,6 @@
 package com.agrovalle.cosecha.util
 
+import java.util.Locale
 import kotlin.math.abs
 
 data class EvaluacionReclamoPeso(
@@ -18,10 +19,10 @@ data class EvaluacionReclamoPeso(
 object CalculadoraReclamoPeso {
 
     /**
-     * Calcula el peso neto en kg con precisión de gramo (3 decimales) a partir de
-     * peso bruto, jabas y tara por jaba.
+     * Calcula el peso neto del re-pesaje con la misma precisión (2 decimales) que
+     * [CalculadoraPesaje]. Exige que el peso bruto supere la tara total (neto > 0).
      */
-    fun calcularPesoNetoPrecisionGramos(
+    fun calcularPesoNeto(
         pesoBrutoKg: Double,
         cantidadJabas: Int,
         taraPorJabaKg: Double
@@ -35,8 +36,24 @@ object CalculadoraReclamoPeso {
         require(taraPorJabaKg.isFinite() && taraPorJabaKg >= 0.0) {
             "La tara por jaba no es válida"
         }
-        val taraTotal = redondear3(taraPorJabaKg * cantidadJabas)
-        return redondear3((pesoBrutoKg - taraTotal).coerceAtLeast(0.0))
+        val taraTotal = CalculadoraPesaje.calcularTaraTotal(cantidadJabas, taraPorJabaKg)
+        require(pesoBrutoKg > taraTotal) {
+            String.format(
+                Locale.US,
+                "El peso bruto del re-pesaje (%.2f kg) debe ser mayor a la tara total (%.2f kg)",
+                pesoBrutoKg,
+                taraTotal
+            )
+        }
+        val pesoNeto = CalculadoraPesaje.calcularPesoNeto(pesoBrutoKg, cantidadJabas, taraPorJabaKg)
+        require(pesoNeto > 0.0) {
+            String.format(
+                Locale.US,
+                "El peso neto del re-pesaje debe ser mayor a 0 kg (tara total: %.2f kg)",
+                taraTotal
+            )
+        }
+        return pesoNeto
     }
 
     /**
@@ -76,6 +93,4 @@ object CalculadoraReclamoPeso {
             pesoCompensatorioKg = if (excede) diffKg else 0.0
         )
     }
-
-    private fun redondear3(valor: Double): Double = Math.round(valor * 1000.0) / 1000.0
 }

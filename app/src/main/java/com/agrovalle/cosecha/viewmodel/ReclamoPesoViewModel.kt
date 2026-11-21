@@ -89,11 +89,17 @@ class ReclamoPesoViewModel : ViewModel() {
             _uiState.update { it.copy(evaluacionEnCurso = null) }
             return
         }
-        val nuevoNeto = CalculadoraReclamoPeso.calcularPesoNetoPrecisionGramos(
-            pesoBrutoKg = bruto,
-            cantidadJabas = seleccionado.pesaje.cantidadJabas,
-            taraPorJabaKg = _uiState.value.taraVigenteKg
-        )
+        val nuevoNeto = runCatching {
+            CalculadoraReclamoPeso.calcularPesoNeto(
+                pesoBrutoKg = bruto,
+                cantidadJabas = seleccionado.pesaje.cantidadJabas,
+                taraPorJabaKg = _uiState.value.taraVigenteKg
+            )
+        }.getOrNull()
+        if (nuevoNeto == null) {
+            _uiState.update { it.copy(evaluacionEnCurso = null) }
+            return
+        }
         val evaluacion = CalculadoraReclamoPeso.evaluarReclamo(
             pesoOriginalNetoKg = seleccionado.pesaje.pesoNeto,
             pesoNuevoNetoKg = nuevoNeto
@@ -104,11 +110,18 @@ class ReclamoPesoViewModel : ViewModel() {
     fun validarListoParaAutorizacionQr(pesoBrutoTexto: String): Boolean {
         val bruto = parsearPesoBrutoValido(pesoBrutoTexto) ?: return false
         val seleccionado = _uiState.value.pesajeSeleccionado ?: return false
-        val nuevoNeto = CalculadoraReclamoPeso.calcularPesoNetoPrecisionGramos(
-            pesoBrutoKg = bruto,
-            cantidadJabas = seleccionado.pesaje.cantidadJabas,
-            taraPorJabaKg = _uiState.value.taraVigenteKg
-        )
+        val nuevoNeto = try {
+            CalculadoraReclamoPeso.calcularPesoNeto(
+                pesoBrutoKg = bruto,
+                cantidadJabas = seleccionado.pesaje.cantidadJabas,
+                taraPorJabaKg = _uiState.value.taraVigenteKg
+            )
+        } catch (e: IllegalArgumentException) {
+            _uiState.update {
+                it.copy(mensaje = e.message ?: "Peso bruto inválido para reclamo", esError = true)
+            }
+            return false
+        }
         val evaluacion = CalculadoraReclamoPeso.evaluarReclamo(
             pesoOriginalNetoKg = seleccionado.pesaje.pesoNeto,
             pesoNuevoNetoKg = nuevoNeto

@@ -22,7 +22,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.Calendar
 import java.util.Date
+import java.util.TimeZone
 
 /**
  * Almacén del cuartel actual asignado a cada jornalero.
@@ -240,6 +242,7 @@ class ParihuelaRepository(
 
     companion object {
         private val mutexTransaccion = Mutex()
+        private val ZONA_HORARIA_LIMA: TimeZone = TimeZone.getTimeZone("America/Lima")
 
         const val LIMITE_JABAS = 120
         const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
@@ -322,6 +325,14 @@ class ParihuelaRepository(
             val minutos = totalSeg / 60L
             val segundos = totalSeg % 60L
             return "$minutos min $segundos s"
+        }
+
+        /** Verifica si [fecha] pertenece al mismo día calendario que [referencia] en America/Lima. */
+        internal fun esMismaJornadaLima(fecha: Date, referencia: Date): Boolean {
+            val calFecha = Calendar.getInstance(ZONA_HORARIA_LIMA).apply { time = fecha }
+            val calRef = Calendar.getInstance(ZONA_HORARIA_LIMA).apply { time = referencia }
+            return calFecha.get(Calendar.YEAR) == calRef.get(Calendar.YEAR) &&
+                calFecha.get(Calendar.DAY_OF_YEAR) == calRef.get(Calendar.DAY_OF_YEAR)
         }
     }
 
@@ -837,6 +848,8 @@ class ParihuelaRepository(
             val porCuartel = jornalerosActivos
                 .groupBy { it.cuartelActual }
                 .toSortedMap()
+            val parihuelasById = parihuelas.associateBy { it.id }
+            val kilosPorCuartel = construirKilosPorCuartel(parihuelasById, pesajes)
 
             ResumenPanelCapataz(
                 totalAbiertas = abiertas.size,
@@ -854,7 +867,7 @@ class ParihuelaRepository(
                 jabasPorCuartel = parihuelas
                     .groupBy { it.cuartel }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
-                kilosPorCuartel = porCuartel.mapValues { (_, lista) -> lista.sumOf { it.kilosNetos } },
+                kilosPorCuartel = kilosPorCuartel,
                 abiertasPorUrgencia = abiertas,
                 retenidasCalidad = retenidas,
                 rendimientoDetallado = rendimientoDetallado,
@@ -960,12 +973,25 @@ class ParihuelaRepository(
         return ultimoPesaje?.let { parihuelasById[it.parihuelaId]?.cuartel }
     }
 
+    private fun construirKilosPorCuartel(
+        parihuelasById: Map<Long, ParihuelaEntity>,
+        pesajes: List<PesajeEntity>
+    ): Map<String, Double> {
+        val acumulado = linkedMapOf<String, Double>()
+        pesajes.forEach { pesaje ->
+            val cuartel = parihuelasById[pesaje.parihuelaId]?.cuartel ?: return@forEach
+            acumulado[cuartel] = (acumulado[cuartel] ?: 0.0) + pesaje.pesoKg
+        }
+        return acumulado.toSortedMap()
+    }
+
     private fun construirRendimientoDetallado(
         pesajes: List<PesajeEntity>,
         ahora: Date
     ): List<RendimientoJornalero> {
-        if (pesajes.isEmpty()) return emptyList()
-        return pesajes
+        val pesajesJornada = pesajes.filter { esMismaJornadaLima(it.fechaHora, ahora) }
+        if (pesajesJornada.isEmpty()) return emptyList()
+        return pesajesJornada
             .groupBy { it.jornalero.trim().lowercase() }
             .values
             .map { lista ->
@@ -994,10 +1020,11 @@ class ParihuelaRepository(
         ahora: Date
     ): List<JornaleroCuartelResumen> {
         val parihuelasById = parihuelas.associateBy { it.id }
+        val pesajesJornada = pesajes.filter { esMismaJornadaLima(it.fechaHora, ahora) }
         val cuartelInicialPorPesaje = linkedMapOf<String, String>()
         val nombresCanonicos = linkedMapOf<String, String>()
 
-        pesajes
+        pesajesJornada
             .sortedWith(compareBy<PesajeEntity> { it.fechaHora.time }.thenBy { it.id })
             .forEach { p ->
                 val clave = p.jornalero.trim().lowercase()
@@ -1007,7 +1034,7 @@ class ParihuelaRepository(
                 }
             }
 
-        val rendimientosPorClave = construirRendimientoDetallado(pesajes, ahora)
+        val rendimientosPorClave = construirRendimientoDetallado(pesajesJornada, ahora)
             .associateBy { it.jornalero.trim().lowercase() }
 
         val cuartelPorReasignacion = linkedMapOf<String, String>()

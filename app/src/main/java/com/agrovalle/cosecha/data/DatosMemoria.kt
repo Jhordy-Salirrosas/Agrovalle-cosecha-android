@@ -10,6 +10,7 @@ import com.agrovalle.cosecha.model.ReclamoPeso
 import com.agrovalle.cosecha.model.RegistroIngresoManual
 import com.agrovalle.cosecha.model.ResumenCuadrillaCierre
 import com.agrovalle.cosecha.util.CalculadoraCierreTurno
+import com.agrovalle.cosecha.util.CalculadoraPesaje
 import com.agrovalle.cosecha.util.CalculadoraReclamoPeso
 import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.FechaHoraUtil
@@ -316,9 +317,16 @@ object DatosMemoria {
             "No se puede iniciar un reclamo sobre un pesaje compensatorio"
         }
 
+        val yaTieneCompensatorio = bitacoraReclamos.any {
+            it.pesajeOriginalId == original.id && it.estado == EstadoReclamoPeso.COMPENSADO
+        } || pesajes.any { it.esCompensatorio && it.pesajeOriginalId == original.id }
+        check(!yaTieneCompensatorio) {
+            "El pesaje #${original.id} ya tiene un reclamo compensatorio registrado y no admite otro"
+        }
+
         val jornaleroNombre = buscarJornaleroPorId(original.jornaleroId)?.nombreCompleto
             ?: "Jornalero #${original.jornaleroId}"
-        val nuevoNetoKg = CalculadoraReclamoPeso.calcularPesoNetoPrecisionGramos(
+        val nuevoNetoKg = CalculadoraReclamoPeso.calcularPesoNeto(
             pesoBrutoKg = nuevoPesoBrutoKg,
             cantidadJabas = original.cantidadJabas,
             taraPorJabaKg = taraPorJabaKg
@@ -327,7 +335,7 @@ object DatosMemoria {
             pesoOriginalNetoKg = original.pesoNeto,
             pesoNuevoNetoKg = nuevoNetoKg
         )
-        val taraAplicada = Math.round(taraPorJabaKg * original.cantidadJabas * 1000.0) / 1000.0
+        val taraAplicada = CalculadoraPesaje.calcularTaraTotal(original.cantidadJabas, taraPorJabaKg)
 
         if (!evaluacion.excedeTolerancia) {
             val reclamo = ReclamoPeso(

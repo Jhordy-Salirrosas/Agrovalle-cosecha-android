@@ -73,6 +73,18 @@ class AgroValleDatabaseMigrationTest {
                 VALUES (1, 1, 'MEZCLA_VARIEDAD', 'Biloxi en lugar de Ventura', 1700000020000)
                 """.trimIndent()
             )
+            db.execSQL(
+                """
+                INSERT INTO pesajes (id, parihuela_id, jornalero, cantidad_jabas, fecha_hora)
+                VALUES (1, 1, 'Juan Perez', 10, 1700000021000)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO bitacora (id, parihuela_id, evento, detalle, fecha_hora)
+                VALUES (1, 1, 'ALERTA_POR_VENCER', 'Quedan 5 minutos', 1700000022000)
+                """.trimIndent()
+            )
         }
 
         val migratedDb = helper.runMigrationsAndValidate(
@@ -81,11 +93,35 @@ class AgroValleDatabaseMigrationTest {
             true,
             AgroValleDatabase.MIGRATION_2_3
         )
-        migratedDb.query("SELECT estado, accion_tomada, responsable FROM incidencias WHERE id = 1").use { cursor ->
+        migratedDb.query("SELECT id, codigo FROM parihuelas WHERE id = 1").use { cursor ->
             assertTrue(cursor.moveToFirst())
-            assertEquals("PENDIENTE", cursor.getString(0))
-            assertTrue(cursor.isNull(1))
+            assertEquals(1L, cursor.getLong(0))
+            assertEquals("PAR-200-0001", cursor.getString(1))
+        }
+        migratedDb.query(
+            "SELECT parihuela_id, estado, accion_tomada, responsable FROM incidencias WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1L, cursor.getLong(0))
+            assertEquals("PENDIENTE", cursor.getString(1))
             assertTrue(cursor.isNull(2))
+            assertTrue(cursor.isNull(3))
+        }
+        migratedDb.query(
+            "SELECT parihuela_id, jornalero, cantidad_jabas FROM pesajes WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1L, cursor.getLong(0))
+            assertEquals("Juan Perez", cursor.getString(1))
+            assertEquals(10, cursor.getInt(2))
+        }
+        migratedDb.query(
+            "SELECT parihuela_id, evento, detalle FROM bitacora WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1L, cursor.getLong(0))
+            assertEquals("ALERTA_POR_VENCER", cursor.getString(1))
+            assertEquals("Quedan 5 minutos", cursor.getString(2))
         }
         migratedDb.close()
     }
