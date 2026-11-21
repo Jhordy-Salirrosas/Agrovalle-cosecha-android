@@ -19,6 +19,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.agrovalle.cosecha.R
 import com.agrovalle.cosecha.databinding.ActivityReclamosPesoBinding
 import com.agrovalle.cosecha.model.EstadoReclamoPeso
+import com.agrovalle.cosecha.util.CalculadoraReclamoPeso
 import com.agrovalle.cosecha.util.FeedbackUtil
 import com.agrovalle.cosecha.viewmodel.ReclamoPesoUiState
 import com.agrovalle.cosecha.viewmodel.ReclamoPesoViewModel
@@ -206,15 +207,20 @@ class ReclamosPesoActivity : AppCompatActivity() {
             return
         }
         binding.cardFormularioReclamo.visibility = View.VISIBLE
+        val taraTotalAplicada = CalculadoraReclamoPeso.resolverTaraTotal(
+            taraTotalOriginalKg = sel.pesaje.taraTotal,
+            cantidadJabas = sel.pesaje.cantidadJabas,
+            taraPorJabaRespaldoKg = state.taraVigenteKg
+        )
         binding.tvDetallePesajeSeleccionado.text = String.format(
             Locale.US,
-            "Original #%d (%s) • %d jabas • Neto original: %.3f kg\nTara aplicada: %.3f kg/jaba %s",
+            "Original #%d (%s) • %d jabas • Neto original: %.2f kg\nTara total del pesaje: %.2f kg %s",
             sel.pesaje.id,
             sel.jornaleroNombre,
             sel.pesaje.cantidadJabas,
             sel.pesaje.pesoNeto,
-            state.taraVigenteKg,
-            if (state.esTaraPorDefecto) "(Defecto)" else "(Calibrada)"
+            taraTotalAplicada,
+            if (sel.pesaje.esTaraPorDefecto) "(Defecto)" else "(Calibrada)"
         )
 
         val eval = state.evaluacionEnCurso
@@ -229,7 +235,7 @@ class ReclamosPesoActivity : AppCompatActivity() {
         } else if (!eval.excedeTolerancia) {
             binding.tvResultadoComparacionReclamo.text = String.format(
                 Locale.US,
-                "Nuevo neto: %.3f kg • Diferencia: %+.0f g (<= 20 g).\nDentro de tolerancia: se mantiene el pesaje original y se registra en bitácora.",
+                "Nuevo neto: %.2f kg • Diferencia: %+.0f g (<= 20 g).\nDentro de tolerancia: se mantiene el pesaje original y se registra en bitácora.",
                 eval.pesoNuevoNetoKg,
                 eval.diferenciaGramos
             )
@@ -241,7 +247,7 @@ class ReclamosPesoActivity : AppCompatActivity() {
         } else {
             binding.tvResultadoComparacionReclamo.text = String.format(
                 Locale.US,
-                "Nuevo neto: %.3f kg • Diferencia: %+.0f g (> 20 g).\nSupera tolerancia: compensatorio de %+.3f kg. Exige autorización QR del capataz.",
+                "Nuevo neto: %.2f kg • Diferencia: %+.0f g (> 20 g).\nSupera tolerancia: se registrará compensatorio de %.2f kg. Exige autorización QR del capataz.",
                 eval.pesoNuevoNetoKg,
                 eval.diferenciaGramos,
                 eval.pesoCompensatorioKg
@@ -277,7 +283,7 @@ class ReclamosPesoActivity : AppCompatActivity() {
             val detalleCompensatorio = if (reg.estado == EstadoReclamoPeso.COMPENSADO) {
                 String.format(
                     Locale.US,
-                    "\nPesaje compensatorio #%d: %+.3f kg (vinculado a #%d)\nAutorizado por: %s (%s)",
+                    "\nPesaje compensatorio #%d: %.2f kg (vinculado a #%d)\nAutorizado por: %s (%s)",
                     reg.pesajeCompensatorioId ?: 0L,
                     reg.pesoCompensatorioKg ?: 0.0,
                     reg.pesajeOriginalId,

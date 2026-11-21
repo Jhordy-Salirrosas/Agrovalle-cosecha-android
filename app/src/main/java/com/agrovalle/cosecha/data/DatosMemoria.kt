@@ -274,10 +274,25 @@ object DatosMemoria {
     fun pesajesDeJornalero(jornaleroId: Long): List<Pesaje> =
         pesajes.filter { it.jornaleroId == jornaleroId }
 
-    /** AGV-004: acumulado diario del cosechador entre dos marcas de tiempo. */
-    fun acumuladoDiario(jornaleroId: Long, desde: Long, hasta: Long): Double =
-        pesajes.filter { it.jornaleroId == jornaleroId && it.timestamp in desde..hasta }
+    /**
+     * AGV-004 / H-11: acumulado diario del cosechador entre dos marcas de tiempo.
+     * Cuando existe un pesaje compensatorio vinculado a un original, el compensatorio
+     * (que almacena el nuevo peso neto positivo) sustituye al original en el acumulado
+     * sin sumarlo encima y sin modificar el registro original.
+     */
+    fun acumuladoDiario(jornaleroId: Long, desde: Long, hasta: Long): Double {
+        val delPeriodo = pesajes.filter {
+            it.jornaleroId == jornaleroId && it.timestamp in desde..hasta
+        }
+        val originalesSustituidos = delPeriodo
+            .filter { it.esCompensatorio }
+            .mapNotNull { it.pesajeOriginalId }
+            .toSet()
+        val total = delPeriodo
+            .filter { it.esCompensatorio || it.id !in originalesSustituidos }
             .sumOf { it.pesoNeto }
+        return Math.round(total * 1000.0) / 1000.0
+    }
 
     // ------------------------------------------------------------------------
     // Reclamos de peso y compensatorios (AGV-015 escenarios 2.0 y 3.0)
@@ -326,16 +341,19 @@ object DatosMemoria {
 
         val jornaleroNombre = buscarJornaleroPorId(original.jornaleroId)?.nombreCompleto
             ?: "Jornalero #${original.jornaleroId}"
-        val nuevoNetoKg = CalculadoraReclamoPeso.calcularPesoNeto(
-            pesoBrutoKg = nuevoPesoBrutoKg,
+        val taraAplicada = CalculadoraReclamoPeso.resolverTaraTotal(
+            taraTotalOriginalKg = original.taraTotal,
             cantidadJabas = original.cantidadJabas,
-            taraPorJabaKg = taraPorJabaKg
+            taraPorJabaRespaldoKg = taraPorJabaKg
+        )
+        val nuevoNetoKg = CalculadoraReclamoPeso.calcularPesoNetoConTaraTotal(
+            pesoBrutoKg = nuevoPesoBrutoKg,
+            taraTotalKg = taraAplicada
         )
         val evaluacion = CalculadoraReclamoPeso.evaluarReclamo(
             pesoOriginalNetoKg = original.pesoNeto,
             pesoNuevoNetoKg = nuevoNetoKg
         )
-        val taraAplicada = CalculadoraPesaje.calcularTaraTotal(original.cantidadJabas, taraPorJabaKg)
 
         if (!evaluacion.excedeTolerancia) {
             val reclamo = ReclamoPeso(
@@ -370,10 +388,10 @@ object DatosMemoria {
         val compensatorio = registrarPesaje(
             Pesaje(
                 jornaleroId = original.jornaleroId,
-                cantidadJabas = 0,
-                pesoBruto = evaluacion.diferenciaKg,
-                taraTotal = 0.0,
-                pesoNeto = evaluacion.diferenciaKg,
+                cantidadJabas = original.cantidadJabas,
+                pesoBruto = Math.round(nuevoPesoBrutoKg * 100.0) / 100.0,
+                taraTotal = taraAplicada,
+                pesoNeto = evaluacion.pesoNuevoNetoKg,
                 timestamp = timestamp,
                 esTaraPorDefecto = original.esTaraPorDefecto,
                 esCompensatorio = true,

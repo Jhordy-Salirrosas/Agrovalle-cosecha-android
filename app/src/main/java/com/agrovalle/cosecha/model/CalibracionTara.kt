@@ -8,5 +8,7 @@ data class CalibracionTara(
     val pesoMuestra5Jabas: Double,
     val asistenteNombre: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val aprobado: Boolean
+    val aprobado: Boolean,
+    val capatazAutorizador: String? = null,
+    val codigoQrCapataz: String? = null
 ) : Serializable
