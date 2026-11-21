@@ -192,7 +192,8 @@ data class AvanceParihuela(
     val jabasActuales: Int,
     val faltanPara100: Int,
     val faltanPara120: Int,
-    val porcentajeHacia120: Int
+    val porcentajeHacia120: Int,
+    val pisos: Int = 0
 )
 
 /**
@@ -250,10 +251,13 @@ class ParihuelaRepository(
             EstadoParihuela.SELLADA_ANTICIPADA
         )
 
+        const val META_JABAS = 100
         const val LIMITE_JABAS = 120
+        const val JABAS_POR_PISO = 11
         const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
+        const val EVENTO_SELLADO_META = "SELLADO_META"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
         const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
         const val EVENTO_ALERTA_POR_VENCER = "ALERTA_POR_VENCER"
@@ -331,6 +335,12 @@ class ParihuelaRepository(
             val minutos = totalSeg / 60L
             val segundos = totalSeg % 60L
             return "$minutos min $segundos s"
+        }
+
+        /** Calcula los pisos estibados como techo(conteoJabas / 11) (AGV-006 / H-02). */
+        fun calcularPisos(conteoJabas: Int): Int {
+            if (conteoJabas <= 0) return 0
+            return (conteoJabas + JABAS_POR_PISO - 1) / JABAS_POR_PISO
         }
 
         /** Verifica si [fecha] pertenece al mismo día calendario que [referencia] en America/Lima. */
@@ -520,6 +530,7 @@ class ParihuelaRepository(
         if (nuevoConteo == LIMITE_JABAS) {
             val sellada = actualConInicio.copy(
                 conteoJabas = nuevoConteo,
+                pisos = calcularPisos(nuevoConteo),
                 estado = EstadoParihuela.SELLADA,
                 horaSellado = ahora
             )
@@ -553,7 +564,10 @@ class ParihuelaRepository(
             )
         }
 
-        val actualizada = actualConInicio.copy(conteoJabas = nuevoConteo)
+        val actualizada = actualConInicio.copy(
+            conteoJabas = nuevoConteo,
+            pisos = calcularPisos(nuevoConteo)
+        )
         parihuelaDao.update(actualizada)
         return ResultadoRegistroJabas(
             parihuela = actualizada,
@@ -561,6 +575,65 @@ class ParihuelaRepository(
             selladaPorLimite = false,
             cronometroIniciadoEnEstePesaje = esPrimerPesaje
         )
+    }
+
+    /**
+     * Sella manualmente una parihuela ABIERTA que alcanzó la meta (100 a 119 jabas)
+     * sin exigir motivo, dejándola en estado [EstadoParihuela.SELLADA] (AGV-006 / H-01).
+     */
+    suspend fun sellarEnMeta(
+        parihuelaId: Long,
+        ahora: Date = Date()
+    ): ParihuelaEntity = enTransaccionAtomica {
+        val actual = parihuelaDao.getById(parihuelaId)
+            ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
+
+        if (actual.estado == EstadoParihuela.RETENIDA_CALIDAD) {
+            throw IllegalStateException(
+                "La parihuela ${actual.codigo} está retenida por calidad y no se puede sellar hasta liberarla"
+            )
+        }
+
+        if (actual.estado != EstadoParihuela.ABIERTA) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = actual.id,
+                    evento = EVENTO_INTENTO_EDICION,
+                    detalle = "Intento de sellado en meta sobre parihuela en estado ${actual.estado}",
+                    fechaHora = ahora
+                )
+            )
+            throw IllegalStateException("La parihuela ${actual.codigo} ya está sellada")
+        }
+
+        require(actual.conteoJabas >= META_JABAS) {
+            "La parihuela ${actual.codigo} tiene ${actual.conteoJabas} jabas: bajo $META_JABAS corresponde sellado anticipado con motivo"
+        }
+        require(actual.conteoJabas < LIMITE_JABAS) {
+            "La parihuela ${actual.codigo} alcanzó $LIMITE_JABAS jabas: a $LIMITE_JABAS el sellado es automático"
+        }
+
+        val sellada = actual.copy(
+            estado = EstadoParihuela.SELLADA,
+            horaSellado = ahora,
+            motivoSelladoAnticipado = null,
+            pisos = calcularPisos(actual.conteoJabas)
+        )
+        parihuelaDao.update(sellada)
+
+        registrarRetencionExcedidaSiCorresponde(actual, ahora)
+
+        bitacoraDao.insert(
+            BitacoraEntity(
+                parihuelaId = sellada.id,
+                evento = EVENTO_SELLADO_META,
+                detalle = "Sellado en meta al alcanzar ${sellada.conteoJabas} jabas",
+                fechaHora = ahora
+            )
+        )
+        registrarTiempoRetencionTotalAlSellar(sellada, ahora)
+
+        return@enTransaccionAtomica sellada
     }
 
     /**
@@ -1152,9 +1225,10 @@ class ParihuelaRepository(
             AvanceParihuela(
                 parihuelaId = actual.id,
                 jabasActuales = jabas,
-                faltanPara100 = (100 - jabas).coerceAtLeast(0),
+                faltanPara100 = (META_JABAS - jabas).coerceAtLeast(0),
                 faltanPara120 = (LIMITE_JABAS - jabas).coerceAtLeast(0),
-                porcentajeHacia120 = ((jabas * 100) / LIMITE_JABAS).coerceIn(0, 100)
+                porcentajeHacia120 = ((jabas * 100) / LIMITE_JABAS).coerceIn(0, 100),
+                pisos = calcularPisos(jabas)
             )
         }
     }

@@ -85,7 +85,13 @@ class ParihuelaActivity : AppCompatActivity() {
         }
 
         binding.btnSelladoAnticipado.setOnClickListener {
-            mostrarDialogoSelladoAnticipado()
+            val state = viewModel.uiState.value
+            val jabas = state.avance?.jabasActuales ?: state.parihuelaAbierta?.conteoJabas ?: 0
+            if (jabas in ParihuelaRepository.META_JABAS until ParihuelaRepository.LIMITE_JABAS) {
+                viewModel.sellarEnMeta()
+            } else {
+                mostrarDialogoSelladoAnticipado()
+            }
         }
 
         binding.btnActualizarListaJornaleros.setOnClickListener {
@@ -167,7 +173,7 @@ class ParihuelaActivity : AppCompatActivity() {
         if (abierta == null) {
             binding.tvCodigoParihuela.text = "Sin parihuela abierta"
             binding.tvDetalleParihuela.text = "Abra una parihuela para comenzar el registro."
-            binding.tvConteoJabas.text = "0 / 120 jabas"
+            binding.tvConteoJabas.text = "0 / 120 jabas · 0 pisos"
             binding.progressParihuela.progress = 0
             binding.tvFaltantes.text = "Faltan 100 para 100 | 120 para 120 (0%)"
             binding.tvTiempoRetencion.visibility = View.GONE
@@ -186,10 +192,12 @@ class ParihuelaActivity : AppCompatActivity() {
                 "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}\n" +
                     "CLP: ${abierta.clp.ifBlank { "-" }} • Cuadrilla: ${abierta.cuadrilla.ifBlank { "-" }}"
             val jabas = avance?.jabasActuales ?: abierta.conteoJabas
-            val f100 = avance?.faltanPara100 ?: (100 - jabas).coerceAtLeast(0)
-            val f120 = avance?.faltanPara120 ?: (120 - jabas).coerceAtLeast(0)
-            val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
-            binding.tvConteoJabas.text = "$jabas / 120 jabas"
+            val pisos = avance?.pisos ?: ParihuelaRepository.calcularPisos(jabas)
+            val f100 = avance?.faltanPara100 ?: (ParihuelaRepository.META_JABAS - jabas).coerceAtLeast(0)
+            val f120 = avance?.faltanPara120 ?: (ParihuelaRepository.LIMITE_JABAS - jabas).coerceAtLeast(0)
+            val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / ParihuelaRepository.LIMITE_JABAS).coerceIn(0, 100)
+            val enMeta = jabas in ParihuelaRepository.META_JABAS until ParihuelaRepository.LIMITE_JABAS
+            binding.tvConteoJabas.text = "$jabas / 120 jabas · $pisos pisos"
             binding.progressParihuela.progress = pct
             renderizarTiempoRetencion(state)
             if (retenida) {
@@ -205,13 +213,13 @@ class ParihuelaActivity : AppCompatActivity() {
                 binding.btnRegistrarPesajeParihuela.isEnabled = false
                 binding.btnRegistrarPesajeParihuela.text = "Proceda a sellar la parihuela"
                 binding.btnSelladoAnticipado.isEnabled = true
-                binding.btnSelladoAnticipado.text = "Sellado anticipado"
+                binding.btnSelladoAnticipado.text = if (enMeta) "Sellar" else "Sellado anticipado"
             } else {
                 binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
                 binding.btnRegistrarPesajeParihuela.isEnabled = tieneJornaleroValido
                 binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
                 binding.btnSelladoAnticipado.isEnabled = true
-                binding.btnSelladoAnticipado.text = "Sellado anticipado"
+                binding.btnSelladoAnticipado.text = if (enMeta) "Sellar" else "Sellado anticipado"
             }
             binding.btnAbrirParihuela.visibility = View.GONE
             binding.btnSelladoAnticipado.visibility = View.VISIBLE

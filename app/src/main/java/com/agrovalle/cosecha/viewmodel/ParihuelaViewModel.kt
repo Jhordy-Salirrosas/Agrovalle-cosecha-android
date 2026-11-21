@@ -234,6 +234,25 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun sellarEnMeta() {
+        val abierta = _uiState.value.parihuelaAbierta ?: return
+        viewModelScope.launch {
+            try {
+                val sellada = repository.sellarEnMeta(abierta.id)
+                _uiState.update {
+                    it.copy(
+                        mensaje = "Parihuela ${sellada.codigo} sellada en meta (${sellada.conteoJabas} jabas · ${sellada.pisos} pisos).",
+                        esError = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(mensaje = e.message ?: "Error al sellar la parihuela", esError = true)
+                }
+            }
+        }
+    }
+
     fun sellarAnticipadamente(motivo: String) {
         val abierta = _uiState.value.parihuelaAbierta ?: return
         viewModelScope.launch {

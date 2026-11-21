@@ -1579,6 +1579,116 @@ class ParihuelaRepositoryTest {
         assertEquals(EstadoTiempoEspera.POR_VENCER, estadoRetenida.estado)
     }
 
+    @Test
+    fun `sellado en meta a las 100 y a las 119 jabas queda SELLADA sin motivo y con evento en bitacora`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val tSellado100 = Date(t0.time + 12L * 60_000L)
+        val p100 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", t0)
+
+        val sellada100 = repository.sellarEnMeta(p100.id, tSellado100)
+        assertEquals(EstadoParihuela.SELLADA, sellada100.estado)
+        assertEquals(p100.codigo, sellada100.codigo)
+        assertEquals(tSellado100, sellada100.horaSellado)
+        assertNull(sellada100.motivoSelladoAnticipado)
+        assertEquals(10, sellada100.pisos)
+        val eventos100 = bitacoraDao.items.filter { it.parihuelaId == p100.id }
+        assertTrue(eventos100.any { it.evento == ParihuelaRepository.EVENTO_SELLADO_META && it.fechaHora == tSellado100 })
+        assertTrue(eventos100.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
+
+        val t1 = Date(tSellado100.time + 60_000L)
+        val tSellado119 = Date(t1.time + 20L * 60_000L)
+        val p119 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", t1)
+        repository.registrarPesaje("Maria Lopez", 119, 214.2, "Ventura", "Cuartel 05", t1)
+
+        val sellada119 = repository.sellarEnMeta(p119.id, tSellado119)
+        assertEquals(EstadoParihuela.SELLADA, sellada119.estado)
+        assertEquals(p119.codigo, sellada119.codigo)
+        assertEquals(tSellado119, sellada119.horaSellado)
+        assertNull(sellada119.motivoSelladoAnticipado)
+        assertEquals(11, sellada119.pisos)
+        val eventos119 = bitacoraDao.items.filter { it.parihuelaId == p119.id }
+        assertTrue(eventos119.any { it.evento == ParihuelaRepository.EVENTO_SELLADO_META && it.fechaHora == tSellado119 })
+        assertTrue(eventos119.any { it.evento == ParihuelaRepository.EVENTO_TIEMPO_RETENCION })
+    }
+
+    @Test
+    fun `sellado en meta con 99 jabas es rechazado con error claro sin alterar la parihuela`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        repository.registrarPesaje("Juan Perez", 99, 178.2, "Biloxi", "Cuartel 01", t0)
+
+        try {
+            repository.sellarEnMeta(parihuela.id, Date(t0.time + 60_000L))
+            fail("Debió rechazar sellado en meta con 99 jabas")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("sellado anticipado"))
+        }
+
+        val persistida = parihuelaDao.getById(parihuela.id)!!
+        assertEquals(EstadoParihuela.ABIERTA, persistida.estado)
+        assertNull(persistida.horaSellado)
+        assertTrue(bitacoraDao.items.isEmpty())
+    }
+
+    @Test
+    fun `sellado anticipado bajo 100 jabas sigue exigiendo motivo y deja estado SELLADA_ANTICIPADA`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        repository.registrarPesaje("Juan Perez", 60, 108.0, "Biloxi", "Cuartel 01", t0)
+
+        try {
+            repository.sellarAnticipadamente(parihuela.id, "   ", Date(t0.time + 60_000L))
+            fail("El sellado anticipado bajo 100 debe seguir exigiendo motivo")
+        } catch (expected: IllegalArgumentException) {
+            // Esperado
+        }
+
+        val sellada = repository.sellarAnticipadamente(parihuela.id, "Cierre por clima", Date(t0.time + 120_000L))
+        assertEquals(EstadoParihuela.SELLADA_ANTICIPADA, sellada.estado)
+        assertEquals("Cierre por clima", sellada.motivoSelladoAnticipado)
+        assertTrue(bitacoraDao.items.any { it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_SELLADO_ANTICIPADO })
+    }
+
+    @Test
+    fun `calculo de pisos y actualizacion por pesaje cumple techo de jabas entre 11`() = runBlocking {
+        assertEquals(0, ParihuelaRepository.calcularPisos(0))
+        assertEquals(1, ParihuelaRepository.calcularPisos(1))
+        assertEquals(1, ParihuelaRepository.calcularPisos(11))
+        assertEquals(2, ParihuelaRepository.calcularPisos(12))
+        assertEquals(10, ParihuelaRepository.calcularPisos(100))
+        assertEquals(10, ParihuelaRepository.calcularPisos(110))
+        assertEquals(11, ParihuelaRepository.calcularPisos(119))
+        assertEquals(11, ParihuelaRepository.calcularPisos(120))
+
+        val t0 = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        assertEquals(0, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 1, 2.0, "Biloxi", "Cuartel 01", t0)
+        assertEquals(1, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 10, 20.0, "Biloxi", "Cuartel 01", t0) // 11
+        assertEquals(1, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 1, 2.0, "Biloxi", "Cuartel 01", t0) // 12
+        assertEquals(2, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 88, 176.0, "Biloxi", "Cuartel 01", t0) // 100
+        assertEquals(10, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 10, 20.0, "Biloxi", "Cuartel 01", t0) // 110
+        assertEquals(10, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 9, 18.0, "Biloxi", "Cuartel 01", t0) // 119
+        assertEquals(11, parihuelaDao.getById(parihuela.id)!!.pisos)
+
+        repository.registrarPesaje("Juan Perez", 1, 2.0, "Biloxi", "Cuartel 01", t0) // 120 (sellada)
+        assertEquals(11, parihuelaDao.getById(parihuela.id)!!.pisos)
+        val origen = repository.consultarOrigenPorCodigo(parihuela.codigo) as ConsultaOrigenParihuela.Encontrado
+        assertEquals(11, origen.origen.pisos)
+    }
+
     private class FakeParihuelaDao : ParihuelaDao {
         private var seq = 0L
         private val data = linkedMapOf<Long, ParihuelaEntity>()
