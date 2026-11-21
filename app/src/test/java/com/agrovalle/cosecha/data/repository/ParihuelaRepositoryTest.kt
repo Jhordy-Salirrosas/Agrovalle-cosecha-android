@@ -37,7 +37,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
+import java.util.Calendar
 import java.util.Date
+import java.util.TimeZone
 
 class ParihuelaRepositoryTest {
 
@@ -1073,8 +1075,8 @@ class ParihuelaRepositoryTest {
             hora = t4h
         )
         val resumenTrasReasig = repository.observarResumenPanel { t4h }.first()
-        assertEquals(20.0, resumenTrasReasig.kilosPorCuartel["Cuartel 05"]!!, 0.001)
-        assertEquals(20.0, resumenTrasReasig.kilosPorCuartel["Cuartel 01"]!!, 0.001)
+        assertEquals(40.0, resumenTrasReasig.kilosPorCuartel["Cuartel 01"]!!, 0.001)
+        assertNull(resumenTrasReasig.kilosPorCuartel["Cuartel 05"])
         val enCuartel05 = resumenTrasReasig.jornalerosPorCuartel["Cuartel 05"]!!.single()
         assertEquals(jBajo.nombreCompleto, enCuartel05.nombre)
         assertEquals(20.0, enCuartel05.kilosNetos, 0.001)
@@ -1364,6 +1366,96 @@ class ParihuelaRepositoryTest {
         assertEquals(2, emisiones.size)
         assertEquals(0, emisiones[0].size)
         assertEquals(1, emisiones[1].size)
+    }
+
+    @Test
+    fun `pesaje de ayer no cuenta como primer pesaje ni alimenta tasa ni alerta de hoy en America Lima`() = runBlocking {
+        val lima = TimeZone.getTimeZone("America/Lima")
+        fun fechaLima(anio: Int, mes: Int, dia: Int, hora: Int, minuto: Int): Date =
+            Calendar.getInstance(lima).apply {
+                set(anio, mes - 1, dia, hora, minuto, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.time
+
+        val j1 = DatosMemoria.listaJornaleros[0]
+        DatosMemoria.asignarCuartel(j1.id, "Cuartel 01")
+
+        // 22:30 Lima del 19/11 ya es 03:30 UTC del 20/11: valida filtro por America/Lima (no UTC)
+        val ayer2230 = fechaLima(2026, 11, 19, 22, 30)
+        val hoy0800 = fechaLima(2026, 11, 20, 8, 0)
+        val hoy0900 = fechaLima(2026, 11, 20, 9, 0)
+        val hoy1000 = fechaLima(2026, 11, 20, 10, 0)
+
+        val pAyer = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", ayer2230)
+        repository.registrarPesaje(j1.nombreCompleto, 2, 5.0, "Biloxi", "Cuartel 01", ayer2230)
+        repository.sellarAnticipadamente(pAyer.id, "Cierre día anterior", ayer2230)
+
+        repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", hoy0800)
+        repository.registrarPesaje(j1.nombreCompleto, 5, 10.0, "Biloxi", "Cuartel 01", hoy0800)
+        repository.registrarPesaje(j1.nombreCompleto, 5, 10.0, "Biloxi", "Cuartel 01", hoy0900)
+
+        // En hoy1000: solo hoy -> 20 kg / 2 h = 10.0 kg/h >= 8.75 (OK). Con ayer sería 25 kg / 11.5 h = 2.17 kg/h (falsa alerta).
+        val resumen = repository.observarResumenPanel { hoy1000 }.first()
+        assertEquals(1, resumen.totalAbiertas)
+        assertEquals(1, resumen.totalSelladasAnticipadas)
+
+        val rend = resumen.rendimientoDetallado.single { it.jornalero == j1.nombreCompleto }
+        assertEquals(hoy0800, rend.horaPrimerPesaje)
+        assertEquals(20.0, rend.totalKilos, 0.001)
+        assertEquals(10, rend.totalJabas)
+        assertEquals(10.0, rend.tasaKgPorHora!!, 0.001)
+        assertFalse(rend.bajoRendimiento)
+
+        val activo = resumen.jornalerosActivos.single { it.nombre == j1.nombreCompleto }
+        assertEquals(hoy0800, activo.horaPrimerPesaje)
+        assertEquals(20.0, activo.kilosNetos, 0.001)
+        assertEquals(10.0, activo.tasaKgPorHora!!, 0.001)
+        assertFalse(activo.bajoRendimiento)
+
+        val rendDirecto = repository.observarRendimientoDetalladoPorJornalero { hoy1000 }.first().single()
+        assertEquals(hoy0800, rendDirecto.horaPrimerPesaje)
+        assertEquals(20.0, rendDirecto.totalKilos, 0.001)
+        assertFalse(rendDirecto.bajoRendimiento)
+    }
+
+    @Test
+    fun `tras reasignar jornalero sus kilos previos quedan en cuartel origen y kilosPorCuartel cuadra con jabasPorCuartel`() = runBlocking {
+        val j1 = DatosMemoria.listaJornaleros[0]
+        val j2 = DatosMemoria.listaJornaleros[1]
+        DatosMemoria.asignarCuartel(j1.id, "Cuartel 01")
+        DatosMemoria.asignarCuartel(j2.id, "Cuartel 01")
+
+        val t0 = Date(1_700_000_000_000L)
+        val t1 = Date(t0.time + 30L * 60_000L)
+        val t2 = Date(t0.time + 60L * 60_000L)
+
+        val p1 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        repository.registrarPesaje(j1.nombreCompleto, 10, 20.0, "Biloxi", "Cuartel 01", t0)
+        repository.registrarPesaje(j2.nombreCompleto, 10, 25.0, "Biloxi", "Cuartel 01", t0)
+
+        repository.reasignarJornaleroACuartel(
+            jornalero = j1.nombreCompleto,
+            cuartelDestino = "Cuartel 05",
+            motivo = ParihuelaRepository.MOTIVO_REASIG_REFUERZO_CARGA,
+            hora = t1
+        )
+
+        val resumenTrasReasig = repository.observarResumenPanel { t1 }.first()
+        assertEquals(mapOf("Cuartel 01" to 20), resumenTrasReasig.jabasPorCuartel)
+        assertEquals(mapOf("Cuartel 01" to 45.0), resumenTrasReasig.kilosPorCuartel)
+        assertNull(resumenTrasReasig.kilosPorCuartel["Cuartel 05"])
+        assertEquals(resumenTrasReasig.jabasPorCuartel.keys, resumenTrasReasig.kilosPorCuartel.keys)
+        assertEquals(j1.nombreCompleto, resumenTrasReasig.jornalerosPorCuartel["Cuartel 05"]!!.single().nombre)
+
+        // Al abrir parihuela en Cuartel 05 y registrar un nuevo pesaje allí, ambos cuarteles cuadran
+        repository.sellarAnticipadamente(p1.id, "Cambio de frente", t2)
+        repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-01", t2)
+        repository.registrarPesaje(j1.nombreCompleto, 5, 12.5, "Ventura", "Cuartel 05", t2)
+
+        val resumenConDestino = repository.observarResumenPanel { t2 }.first()
+        assertEquals(mapOf("Cuartel 01" to 20, "Cuartel 05" to 5), resumenConDestino.jabasPorCuartel)
+        assertEquals(mapOf("Cuartel 01" to 45.0, "Cuartel 05" to 12.5), resumenConDestino.kilosPorCuartel)
+        assertEquals(resumenConDestino.jabasPorCuartel.keys, resumenConDestino.kilosPorCuartel.keys)
     }
 
     private class FakeParihuelaDao : ParihuelaDao {
