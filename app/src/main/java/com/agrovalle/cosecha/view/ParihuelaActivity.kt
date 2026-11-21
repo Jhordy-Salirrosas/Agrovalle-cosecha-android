@@ -19,13 +19,17 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.agrovalle.cosecha.R
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
+import com.agrovalle.cosecha.data.repository.EstadoTiempoEspera
 import com.agrovalle.cosecha.data.repository.JornaleroAsistenciaOpcion
+import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.SelectorJornalerosAsistencia
 import com.agrovalle.cosecha.databinding.ActivityParihuelaBinding
 import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.viewmodel.ParihuelaUiState
 import com.agrovalle.cosecha.viewmodel.ParihuelaViewModel
 import com.agrovalle.cosecha.worker.TiempoEsperaWorker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -134,8 +138,16 @@ class ParihuelaActivity : AppCompatActivity() {
     private fun observarEstado() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    renderizar(state)
+                launch {
+                    viewModel.uiState.collect { state ->
+                        renderizar(state)
+                    }
+                }
+                launch {
+                    while (isActive) {
+                        viewModel.refrescarTiempoRetencion()
+                        delay(10_000L)
+                    }
                 }
             }
         }
@@ -158,6 +170,7 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvConteoJabas.text = "0 / 120 jabas"
             binding.progressParihuela.progress = 0
             binding.tvFaltantes.text = "Faltan 100 para 100 | 120 para 120 (0%)"
+            binding.tvTiempoRetencion.visibility = View.GONE
             binding.btnAbrirParihuela.visibility = View.VISIBLE
             binding.btnSelladoAnticipado.visibility = View.GONE
             binding.btnRegistrarPesajeParihuela.isEnabled = tieneJornaleroValido
@@ -178,6 +191,7 @@ class ParihuelaActivity : AppCompatActivity() {
             val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
             binding.tvConteoJabas.text = "$jabas / 120 jabas"
             binding.progressParihuela.progress = pct
+            renderizarTiempoRetencion(state)
             if (retenida) {
                 binding.tvFaltantes.text =
                     "Parihuela retenida por calidad — libérela desde Incidencias antes de continuar o sellar."
@@ -210,6 +224,33 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvMensajeEstado.setTextColor(ContextCompat.getColor(this, colorRes))
         } else {
             binding.tvMensajeEstado.visibility = View.GONE
+        }
+    }
+
+    private fun renderizarTiempoRetencion(state: ParihuelaUiState) {
+        binding.tvTiempoRetencion.visibility = View.VISIBLE
+        val tiempo = state.estadoTiempo
+        if (tiempo == null || !tiempo.cronometroIniciado) {
+            binding.tvTiempoRetencion.text = "Tiempo de retención: sin iniciar (esperando primer pesaje)"
+            binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            return
+        }
+        val restanteTxt = ParihuelaRepository.formatearDuracionRetencion(tiempo.restanteMs)
+        when (tiempo.estado) {
+            EstadoTiempoEspera.EN_ESPERA -> {
+                binding.tvTiempoRetencion.text = "Retención restante: $restanteTxt"
+                binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, R.color.verde_agricola))
+            }
+
+            EstadoTiempoEspera.POR_VENCER -> {
+                binding.tvTiempoRetencion.text = "Retención por vencer: $restanteTxt restantes"
+                binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, R.color.color_warning))
+            }
+
+            EstadoTiempoEspera.EXCEDIDA -> {
+                binding.tvTiempoRetencion.text = "Retención excedida: $restanteTxt (límite 45 min superado)"
+                binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+            }
         }
     }
 

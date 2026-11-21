@@ -243,6 +243,12 @@ class ParihuelaRepository(
     companion object {
         private val mutexTransaccion = Mutex()
         private val ZONA_HORARIA_LIMA: TimeZone = TimeZone.getTimeZone("America/Lima")
+        private val ESTADOS_RETENCION_ACTIVA = setOf(
+            EstadoParihuela.ABIERTA,
+            EstadoParihuela.RETENIDA_CALIDAD,
+            EstadoParihuela.SELLADA,
+            EstadoParihuela.SELLADA_ANTICIPADA
+        )
 
         const val LIMITE_JABAS = 120
         const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
@@ -777,13 +783,15 @@ class ParihuelaRepository(
 
     /**
      * Obtiene el estado de tiempo de espera leyendo la parihuela directamente desde la BD.
+     * Devuelve el estado para cualquier parihuela con cronómetro iniciado ([ParihuelaEntity.horaInicio] != null),
+     * sin restringir por estado, y `null` si no existe o aún no tiene primer pesaje (H-08).
      */
     suspend fun obtenerEstadoTiempoParihuela(
         parihuelaId: Long,
         ahora: Date = Date()
     ): EstadoTiempoParihuela? {
         val parihuela = parihuelaDao.getById(parihuelaId) ?: return null
-        if (parihuela.estado != EstadoParihuela.ABIERTA) return null
+        if (parihuela.horaInicio == null) return null
         return calcularTiempoEspera(parihuela, ahora)
     }
 
@@ -1199,7 +1207,8 @@ class ParihuelaRepository(
     }
 
     /**
-     * Evalúa las parihuelas abiertas de forma atómica e intenta mostrar las notificaciones
+     * Evalúa de forma atómica todas las parihuelas con cronómetro en curso (retención activa:
+     * ABIERTA, RETENIDA_CALIDAD, SELLADA y SELLADA_ANTICIPADA) e intenta mostrar las notificaciones
      * correspondientes (POR_VENCER o RETENCION_EXCEDIDA, una sola vez exitosa).
      * Si la notificación no pudo mostrarse (ej. sin permiso), NO marca la alerta como
      * mostrada para permitir reintentos y registra [EVENTO_INTENTO_ALERTA_FALLIDA].
@@ -1213,11 +1222,12 @@ class ParihuelaRepository(
             NotificacionTiempoUtil.ResultadoNotificacion(mostrada = true)
         }
     ): List<ParihuelaEntity> = enTransaccionAtomica {
-        val abiertas = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first()
+        val enRetencionActiva = parihuelaDao.observeAll().first().filter {
+            it.estado in ESTADOS_RETENCION_ACTIVA && it.horaInicio != null
+        }
         val notificadas = mutableListOf<ParihuelaEntity>()
 
-        for (parihuela in abiertas) {
-            if (parihuela.horaInicio == null) continue
+        for (parihuela in enRetencionActiva) {
             val tiempo = calcularTiempoEspera(parihuela, ahora)
             val resultado = when (tiempo.estado) {
                 EstadoTiempoEspera.EN_ESPERA -> false

@@ -96,6 +96,17 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
 
+                <TextView
+                    android:id="@+id/tvTiempoRetencion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Tiempo de retención: sin iniciar"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAbrirParihuela"
                     android:layout_width="match_parent"

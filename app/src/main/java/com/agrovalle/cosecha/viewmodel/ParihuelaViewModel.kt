@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.agrovalle.cosecha.data.local.AgroValleDatabase
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.repository.AvanceParihuela
+import com.agrovalle.cosecha.data.repository.EstadoTiempoParihuela
 import com.agrovalle.cosecha.data.repository.JornaleroAsistenciaOpcion
 import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.ResultadoPesaje
@@ -23,6 +24,7 @@ import kotlinx.coroutines.launch
 data class ParihuelaUiState(
     val parihuelaAbierta: ParihuelaEntity? = null,
     val avance: AvanceParihuela? = null,
+    val estadoTiempo: EstadoTiempoParihuela? = null,
     val jornalerosDisponibles: List<JornaleroAsistenciaOpcion> = emptyList(),
     val jornaleroSeleccionado: String? = null,
     val mensaje: String? = null,
@@ -39,6 +41,7 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
         AgroValleDatabase.getInstance(application).crearParihuelaRepository()
     }
 
+    private val refreshTiempoTrigger = MutableStateFlow(0L)
     private val _uiState = MutableStateFlow(ParihuelaUiState())
     val uiState: StateFlow<ParihuelaUiState> = _uiState.asStateFlow()
     private var ultimaParihuelaConAlertaId: Long? = null
@@ -48,10 +51,14 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             combine(
                 repository.observarParihuelaAbierta(),
-                repository.observarAvanceParihuelaAbierta()
-            ) { abierta, avance ->
-                abierta to avance
-            }.collect { (abierta, avance) ->
+                repository.observarAvanceParihuelaAbierta(),
+                refreshTiempoTrigger
+            ) { abierta, avance, _ ->
+                val estadoTiempo = abierta?.let {
+                    repository.obtenerEstadoTiempoParihuela(it.id)
+                }
+                Triple(abierta, avance, estadoTiempo)
+            }.collect { (abierta, avance, estadoTiempo) ->
                 val inicio = abierta?.horaInicio
                 if (abierta != null && inicio != null && abierta.id != ultimaParihuelaConAlertaId) {
                     ultimaParihuelaConAlertaId = abierta.id
@@ -64,11 +71,16 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                 _uiState.update {
                     it.copy(
                         parihuelaAbierta = abierta,
-                        avance = avance
+                        avance = avance,
+                        estadoTiempo = estadoTiempo
                     )
                 }
             }
         }
+    }
+
+    fun refrescarTiempoRetencion() {
+        refreshTiempoTrigger.update { it + 1L }
     }
 
     fun actualizarListaJornaleros() {
@@ -204,6 +216,7 @@ class ParihuelaViewModel(application: Application) : AndroidViewModel(applicatio
                     }
 
                     is ResultadoPesaje.Registrado -> {
+                        refrescarTiempoRetencion()
                         val msg = if (res.resultadoJabas.selladaPorLimite) {
                             val nueva = res.resultadoJabas.nuevaParihuela?.codigo ?: ""
                             "Parihuela ${res.resultadoJabas.parihuela.codigo} sellada al llegar a 120 jabas (${res.pesaje.pesoKg} kg en último pesaje). Se abrió automáticamente $nueva."

@@ -204,10 +204,16 @@ class ParihuelaRepositoryTest {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", horaApertura)
 
         assertNull(parihuelaDao.getById(parihuela.id)!!.horaInicio)
-        val estadoSinPesaje = repository.obtenerEstadoTiempoParihuela(
-            parihuela.id,
+        assertNull(
+            repository.obtenerEstadoTiempoParihuela(
+                parihuela.id,
+                Date(horaApertura.time + 60 * 60_000L)
+            )
+        )
+        val estadoSinPesaje = repository.calcularTiempoEspera(
+            parihuelaDao.getById(parihuela.id)!!,
             Date(horaApertura.time + 60 * 60_000L)
-        )!!
+        )
         assertFalse(estadoSinPesaje.cronometroIniciado)
         assertEquals(45L * 60L * 1000L, estadoSinPesaje.restanteMs)
         assertEquals(EstadoTiempoEspera.EN_ESPERA, estadoSinPesaje.estado)
@@ -1456,6 +1462,121 @@ class ParihuelaRepositoryTest {
         assertEquals(mapOf("Cuartel 01" to 20, "Cuartel 05" to 5), resumenConDestino.jabasPorCuartel)
         assertEquals(mapOf("Cuartel 01" to 45.0, "Cuartel 05" to 12.5), resumenConDestino.kilosPorCuartel)
         assertEquals(resumenConDestino.jabasPorCuartel.keys, resumenConDestino.kilosPorCuartel.keys)
+    }
+
+    @Test
+    fun `parihuela SELLADA recibe alerta POR_VENCER y marca RETENCION_EXCEDIDA una sola vez`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val sellado = Date(inicio.time + 15L * 60_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
+        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", inicio)
+        repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", sellado)
+        assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(parihuela.id)!!.estado)
+
+        val enPorVencer = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - 3L * 60_000L)
+        val avisoPorVencer = repository.evaluarAlertasTiempo(enPorVencer)
+        assertEquals(listOf(parihuela.id), avisoPorVencer.map { it.id })
+        assertTrue(repository.evaluarAlertasTiempo(Date(enPorVencer.time + 30_000L)).isEmpty())
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_ALERTA_POR_VENCER
+            }
+        )
+
+        val enExcedida = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 60_000L)
+        val avisoExcedida = repository.evaluarAlertasTiempo(enExcedida)
+        assertEquals(listOf(parihuela.id), avisoExcedida.map { it.id })
+        assertTrue(repository.evaluarAlertasTiempo(Date(enExcedida.time + 60_000L)).isEmpty())
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_RETENCION_EXCEDIDA
+            }
+        )
+    }
+
+    @Test
+    fun `parihuela RETENIDA_CALIDAD recibe alerta POR_VENCER y marca RETENCION_EXCEDIDA`() = runBlocking {
+        val inicio = Date(1_700_000_000_000L)
+        val tMezcla = Date(inicio.time + 10L * 60_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
+        repository.registrarPesaje("Juan Perez", 10, 18.0, "Biloxi", "Cuartel 01", inicio)
+
+        val rechazo = repository.registrarPesaje("Juan Perez", 2, 3.6, "Ventura", "Cuartel 01", tMezcla)
+            as ResultadoPesaje.RechazadoPorMezcla
+        repository.resolverIncidencia(
+            incidenciaId = rechazo.incidencia.id,
+            accion = ParihuelaRepository.ACCION_REVISAR_LOTE_PARIHUELA,
+            responsable = "Calidad",
+            ahora = tMezcla
+        )
+        assertEquals(EstadoParihuela.RETENIDA_CALIDAD, parihuelaDao.getById(parihuela.id)!!.estado)
+
+        val enPorVencer = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS - 4L * 60_000L)
+        val avisoPorVencer = repository.evaluarAlertasTiempo(enPorVencer)
+        assertEquals(listOf(parihuela.id), avisoPorVencer.map { it.id })
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_ALERTA_POR_VENCER
+            }
+        )
+
+        val enExcedida = Date(inicio.time + ParihuelaRepository.LIMITE_ESPERA_MS + 2L * 60_000L)
+        val avisoExcedida = repository.evaluarAlertasTiempo(enExcedida)
+        assertEquals(listOf(parihuela.id), avisoExcedida.map { it.id })
+        assertEquals(
+            1,
+            bitacoraDao.items.count {
+                it.parihuelaId == parihuela.id && it.evento == ParihuelaRepository.EVENTO_RETENCION_EXCEDIDA
+            }
+        )
+    }
+
+    @Test
+    fun `obtenerEstadoTiempoParihuela devuelve estado para SELLADA y RETENIDA_CALIDAD y null sin pesajes`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val tConsulta = Date(t0.time + 20L * 60_000L)
+
+        // Sin pesajes -> null
+        val sinPesajes = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        assertNull(repository.obtenerEstadoTiempoParihuela(sinPesajes.id, tConsulta))
+
+        // Con primer pesaje y luego SELLADA -> devuelve estado de tiempo activo
+        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", t0)
+        val resSellado = repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", Date(t0.time + 5L * 60_000L))
+            as ResultadoPesaje.Registrado
+        assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(sinPesajes.id)!!.estado)
+
+        val estadoSellada = repository.obtenerEstadoTiempoParihuela(sinPesajes.id, tConsulta)
+        assertNotNull(estadoSellada)
+        assertTrue(estadoSellada!!.cronometroIniciado)
+        assertEquals(25L * 60_000L, estadoSellada.restanteMs)
+        assertEquals(EstadoTiempoEspera.EN_ESPERA, estadoSellada.estado)
+
+        // Siguiente parihuela autoabierta nace sin pesajes -> null; tras pesaje y RETENIDA_CALIDAD -> devuelve estado
+        val segunda = resSellado.resultadoJabas.nuevaParihuela!!
+        assertNull(repository.obtenerEstadoTiempoParihuela(segunda.id, tConsulta))
+        repository.registrarPesaje("Juan Perez", 10, 18.0, "Biloxi", "Cuartel 01", t0)
+        val mezcla = repository.registrarPesaje("Juan Perez", 1, 2.0, "Ventura", "Cuartel 01", Date(t0.time + 60_000L))
+            as ResultadoPesaje.RechazadoPorMezcla
+        repository.resolverIncidencia(
+            incidenciaId = mezcla.incidencia.id,
+            accion = ParihuelaRepository.ACCION_REVISAR_LOTE_PARIHUELA,
+            responsable = "Calidad",
+            ahora = Date(t0.time + 60_000L)
+        )
+        assertEquals(EstadoParihuela.RETENIDA_CALIDAD, parihuelaDao.getById(segunda.id)!!.estado)
+
+        val estadoRetenida = repository.obtenerEstadoTiempoParihuela(
+            segunda.id,
+            Date(t0.time + ParihuelaRepository.LIMITE_ESPERA_MS - 2L * 60_000L)
+        )
+        assertNotNull(estadoRetenida)
+        assertTrue(estadoRetenida!!.cronometroIniciado)
+        assertEquals(2L * 60_000L, estadoRetenida.restanteMs)
+        assertEquals(EstadoTiempoEspera.POR_VENCER, estadoRetenida.estado)
     }
 
     private class FakeParihuelaDao : ParihuelaDao {
