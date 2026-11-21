@@ -350,6 +350,35 @@ class ParihuelaRepository(
             return calFecha.get(Calendar.YEAR) == calRef.get(Calendar.YEAR) &&
                 calFecha.get(Calendar.DAY_OF_YEAR) == calRef.get(Calendar.DAY_OF_YEAR)
         }
+
+        /**
+         * Obtiene la marca temporal que representa la jornada de una parihuela (H-04):
+         * prioriza [ParihuelaEntity.horaInicio] (primer pesaje); si no hubo pesajes pero ya fue
+         * sellada, usa [ParihuelaEntity.horaSellado]; si aún no tiene pesajes ni sellado, extrae
+         * la marca de apertura del código `PAR-<epochMs>-<seq>` si sigue el formato estándar.
+         */
+        internal fun fechaJornadaParihuela(parihuela: ParihuelaEntity): Date? {
+            parihuela.horaInicio?.let { return it }
+            parihuela.horaSellado?.let { return it }
+            val partes = parihuela.codigo.split('-')
+            if (partes.size >= 3 && partes[0] == "PAR") {
+                partes[1].toLongOrNull()?.let { epochMs ->
+                    if (epochMs > 0L) return Date(epochMs)
+                }
+            }
+            return null
+        }
+
+        /** Indica si la [parihuela] pertenece a la jornada de [referencia] en America/Lima (H-04). */
+        internal fun perteneceAJornada(parihuela: ParihuelaEntity, referencia: Date): Boolean {
+            val fecha = fechaJornadaParihuela(parihuela)
+            return if (fecha != null) {
+                esMismaJornadaLima(fecha, referencia)
+            } else {
+                parihuela.estado == EstadoParihuela.ABIERTA ||
+                    parihuela.estado == EstadoParihuela.RETENIDA_CALIDAD
+            }
+        }
     }
 
     private suspend fun <T> enTransaccionAtomica(bloque: suspend () -> T): T {
@@ -908,7 +937,10 @@ class ParihuelaRepository(
             tickFlow
         ) { parihuelas, pesajes, reasignaciones, _ ->
             val ahora = ahoraProvider()
-            val abiertas = parihuelas
+            val parihuelasJornada = parihuelas.filter { perteneceAJornada(it, ahora) }
+            val pesajesJornada = pesajes.filter { esMismaJornadaLima(it.fechaHora, ahora) }
+
+            val abiertas = parihuelasJornada
                 .filter { it.estado == EstadoParihuela.ABIERTA }
                 .map { parihuela ->
                     ParihuelaAbiertaResumen(
@@ -918,11 +950,11 @@ class ParihuelaRepository(
                 }
                 .sortedBy { it.tiempoEspera.restanteMs }
 
-            val retenidas = parihuelas.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
-            val rendimientoDetallado = construirRendimientoDetallado(pesajes, ahora)
+            val retenidas = parihuelasJornada.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
+            val rendimientoDetallado = construirRendimientoDetallado(pesajesJornada, ahora)
             val jornalerosActivos = construirJornalerosConCuartel(
                 parihuelas = parihuelas,
-                pesajes = pesajes,
+                pesajes = pesajesJornada,
                 reasignaciones = reasignaciones,
                 ahora = ahora
             )
@@ -930,22 +962,22 @@ class ParihuelaRepository(
                 .groupBy { it.cuartelActual }
                 .toSortedMap()
             val parihuelasById = parihuelas.associateBy { it.id }
-            val kilosPorCuartel = construirKilosPorCuartel(parihuelasById, pesajes)
+            val kilosPorCuartel = construirKilosPorCuartel(parihuelasById, pesajesJornada)
 
             ResumenPanelCapataz(
                 totalAbiertas = abiertas.size,
                 totalRetenidasCalidad = retenidas.size,
-                totalSelladas = parihuelas.count { it.estado == EstadoParihuela.SELLADA },
-                totalSelladasAnticipadas = parihuelas.count {
+                totalSelladas = parihuelasJornada.count { it.estado == EstadoParihuela.SELLADA },
+                totalSelladasAnticipadas = parihuelasJornada.count {
                     it.estado == EstadoParihuela.SELLADA_ANTICIPADA
                 },
-                totalJabas = parihuelas.sumOf { it.conteoJabas },
-                totalKilosNetos = pesajes.sumOf { it.pesoKg },
+                totalJabas = parihuelasJornada.sumOf { it.conteoJabas },
+                totalKilosNetos = pesajesJornada.sumOf { it.pesoKg },
                 totalJornalerosActivos = jornalerosActivos.size,
-                jabasPorVariedad = parihuelas
+                jabasPorVariedad = parihuelasJornada
                     .groupBy { it.variedad }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
-                jabasPorCuartel = parihuelas
+                jabasPorCuartel = parihuelasJornada
                     .groupBy { it.cuartel }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
                 kilosPorCuartel = kilosPorCuartel,
@@ -1111,7 +1143,7 @@ class ParihuelaRepository(
                 val clave = p.jornalero.trim().lowercase()
                 nombresCanonicos.putIfAbsent(clave, p.jornalero.trim())
                 parihuelasById[p.parihuelaId]?.cuartel?.let { cuartel ->
-                    cuartelInicialPorPesaje[clave] = cuartel
+                    cuartelInicialPorPesaje.putIfAbsent(clave, cuartel)
                 }
             }
 

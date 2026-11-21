@@ -1401,9 +1401,10 @@ class ParihuelaRepositoryTest {
         repository.registrarPesaje(j1.nombreCompleto, 5, 10.0, "Biloxi", "Cuartel 01", hoy0900)
 
         // En hoy1000: solo hoy -> 20 kg / 2 h = 10.0 kg/h >= 8.75 (OK). Con ayer sería 25 kg / 11.5 h = 2.17 kg/h (falsa alerta).
+        // Con H-04, pAyer (sellada anticipada de ayer) tampoco entra en el conteo de la jornada de hoy.
         val resumen = repository.observarResumenPanel { hoy1000 }.first()
         assertEquals(1, resumen.totalAbiertas)
-        assertEquals(1, resumen.totalSelladasAnticipadas)
+        assertEquals(0, resumen.totalSelladasAnticipadas)
 
         val rend = resumen.rendimientoDetallado.single { it.jornalero == j1.nombreCompleto }
         assertEquals(hoy0800, rend.horaPrimerPesaje)
@@ -1687,6 +1688,129 @@ class ParihuelaRepositoryTest {
         assertEquals(11, parihuelaDao.getById(parihuela.id)!!.pisos)
         val origen = repository.consultarOrigenPorCodigo(parihuela.codigo) as ConsultaOrigenParihuela.Encontrado
         assertEquals(11, origen.origen.pisos)
+    }
+
+    @Test
+    fun `totales, conteos por estado y agrupaciones del panel cuentan solo la jornada actual en America Lima`() = runBlocking {
+        val lima = TimeZone.getTimeZone("America/Lima")
+        fun fechaLima(anio: Int, mes: Int, dia: Int, hora: Int, minuto: Int): Date =
+            Calendar.getInstance(lima).apply {
+                set(anio, mes - 1, dia, hora, minuto, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.time
+
+        // 22:00-22:40 Lima del 19/11 ya es 20/11 en UTC: valida que el corte sea en America/Lima
+        val ayer2200 = fechaLima(2026, 11, 19, 22, 0)
+        val ayer2220 = fechaLima(2026, 11, 19, 22, 20)
+        val ayer2230 = fechaLima(2026, 11, 19, 22, 30)
+        val ayer2240 = fechaLima(2026, 11, 19, 22, 40)
+
+        val hoy0730 = fechaLima(2026, 11, 20, 7, 30)
+        val hoy0800 = fechaLima(2026, 11, 20, 8, 0)
+        val hoy0830 = fechaLima(2026, 11, 20, 8, 30)
+        val hoy0845 = fechaLima(2026, 11, 20, 8, 45)
+        val hoy0900 = fechaLima(2026, 11, 20, 9, 0)
+        val hoy1000 = fechaLima(2026, 11, 20, 10, 0)
+
+        // Datos de AYER: 1 sellada de 120 jabas, 1 sellada anticipada vacía (sin horaInicio), 1 sellada anticipada con jabas
+        val pAyer120 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-01", ayer2200)
+        val resAyer120 = repository.registrarPesaje("Juan Perez", 120, 240.0, "Ventura", "Cuartel 05", ayer2200)
+            as ResultadoPesaje.Registrado
+        assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(pAyer120.id)!!.estado)
+        // La autoabierta de ayer se sella anticipadamente sin pesajes (horaInicio == null, horaSellado == ayer2220)
+        val pAyerVacia = resAyer120.resultadoJabas.nuevaParihuela!!
+        repository.sellarAnticipadamente(pAyerVacia.id, "Cierre sin uso ayer", ayer2220)
+
+        val pAyerAnt = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", ayer2230)
+        repository.registrarPesaje("Juan Perez", 25, 50.0, "Biloxi", "Cuartel 01", ayer2230)
+        repository.sellarAnticipadamente(pAyerAnt.id, "Fin de turno ayer", ayer2230)
+
+        // Datos de HOY: 1 sellada en meta (100 jabas), 1 sellada anticipada (20 jabas) y 1 abierta (15 jabas)
+        val pHoyMeta = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", hoy0730)
+        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", hoy0730)
+        repository.sellarEnMeta(pHoyMeta.id, hoy0800)
+
+        val pHoyAnt = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", hoy0830)
+        repository.registrarPesaje("Maria Lopez", 20, 38.5, "Ventura", "Cuartel 05", hoy0830)
+        repository.sellarAnticipadamente(pHoyAnt.id, "Cambio de lote", hoy0845)
+
+        val pHoyAbierta = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", hoy0900)
+        repository.registrarPesaje("Juan Perez", 15, 29.5, "Biloxi", "Cuartel 01", hoy0900)
+
+        // Además insertamos una retenida por calidad de ayer en Cuartel 12 para validar exclusión en retenidas
+        parihuelaDao.insert(
+            ParihuelaEntity(
+                codigo = "PAR-AYER-RET-01",
+                estado = EstadoParihuela.RETENIDA_CALIDAD,
+                variedad = "Ventura",
+                cuartel = "Cuartel 12",
+                conteoJabas = 10,
+                horaInicio = ayer2240
+            )
+        )
+
+        val resumen = repository.observarResumenPanel { hoy1000 }.first()
+
+        assertEquals(1, resumen.totalAbiertas)
+        assertEquals(listOf(pHoyAbierta.id), resumen.abiertasPorUrgencia.map { it.parihuela.id })
+        assertEquals(0, resumen.totalRetenidasCalidad)
+        assertTrue(resumen.retenidasCalidad.isEmpty())
+        assertEquals(1, resumen.totalSelladas)
+        assertEquals(1, resumen.totalSelladasAnticipadas)
+        assertEquals(135, resumen.totalJabas)
+        assertEquals(248.0, resumen.totalKilosNetos, 0.001)
+        assertEquals(mapOf("Biloxi" to 115, "Ventura" to 20), resumen.jabasPorVariedad)
+        assertEquals(mapOf("Cuartel 01" to 115, "Cuartel 05" to 20), resumen.jabasPorCuartel)
+        assertEquals(209.5, resumen.kilosPorCuartel["Cuartel 01"]!!, 0.001)
+        assertEquals(38.5, resumen.kilosPorCuartel["Cuartel 05"]!!, 0.001)
+        assertEquals(setOf("Cuartel 01", "Cuartel 05"), resumen.kilosPorCuartel.keys)
+    }
+
+    @Test
+    fun `cuartel inicial por pesaje conserva el cuartel del primer pesaje en la ruta de respaldo sin alterar prioridades`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val t1 = Date(t0.time + 15L * 60_000L)
+        val t2 = Date(t0.time + 30L * 60_000L)
+        val t3 = Date(t0.time + 45L * 60_000L)
+
+        // Jornalero sin asignación en DatosMemoria ni reasignaciones -> usa ruta de respaldo por pesaje
+        val jornaleroRespaldo = "Carlos Quispe Respaldo"
+        val jAsignado = DatosMemoria.listaJornaleros[0]
+        DatosMemoria.asignarCuartel(jAsignado.id, "Cuartel 18")
+
+        val p1 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        repository.registrarPesaje(jornaleroRespaldo, 5, 10.0, "Biloxi", "Cuartel 01", t0)
+        repository.registrarPesaje(jAsignado.nombreCompleto, 4, 8.0, "Biloxi", "Cuartel 01", t0)
+        repository.sellarAnticipadamente(p1.id, "Cambio de cuartel", t1)
+
+        repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", t2)
+        repository.registrarPesaje(jornaleroRespaldo, 8, 16.0, "Ventura", "Cuartel 05", t2)
+
+        val resumenRespaldo = repository.observarResumenPanel { t3 }.first()
+        val activoRespaldo = resumenRespaldo.jornalerosActivos.single { it.nombre == jornaleroRespaldo }
+        assertEquals("Cuartel 01", activoRespaldo.cuartelActual)
+        assertEquals(13, activoRespaldo.jabasAcumuladas)
+        assertEquals(26.0, activoRespaldo.kilosNetos, 0.001)
+        assertTrue(resumenRespaldo.jornalerosPorCuartel["Cuartel 01"]!!.any { it.nombre == jornaleroRespaldo })
+        assertNull(resumenRespaldo.jornalerosPorCuartel["Cuartel 05"])
+
+        // Prioridad 1 (asignación guardada) sigue imponiéndose sobre los pesajes
+        val activoAsignado = resumenRespaldo.jornalerosActivos.single { it.nombre == jAsignado.nombreCompleto }
+        assertEquals("Cuartel 18", activoAsignado.cuartelActual)
+
+        // Prioridad 2 (reasignación) sigue imponiéndose sobre el respaldo del primer pesaje
+        reasignacionDao.insert(
+            ReasignacionEntity(
+                jornalero = jornaleroRespaldo,
+                cuartelOrigen = "Cuartel 01",
+                cuartelDestino = "Cuartel 12",
+                motivo = ParihuelaRepository.MOTIVO_REASIG_AVANCE_CUARTEL,
+                hora = t3,
+                sincronizado = false
+            )
+        )
+        val jornalerosTrasReasig = repository.observarJornalerosConCuartel { t3 }.first()
+        assertEquals("Cuartel 12", jornalerosTrasReasig.single { it.nombre == jornaleroRespaldo }.cuartelActual)
     }
 
     private class FakeParihuelaDao : ParihuelaDao {
