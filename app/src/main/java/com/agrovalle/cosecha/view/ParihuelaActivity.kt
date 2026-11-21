@@ -9,6 +9,8 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.Spinner
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -18,6 +20,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.agrovalle.cosecha.R
+import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
 import com.agrovalle.cosecha.data.repository.EstadoTiempoEspera
 import com.agrovalle.cosecha.data.repository.JornaleroAsistenciaOpcion
@@ -125,18 +128,16 @@ class ParihuelaActivity : AppCompatActivity() {
         binding.btnRegistrarPesajeParihuela.setOnClickListener {
             val cantidad = binding.etCantidadJabas.text?.toString()?.toIntOrNull() ?: 0
             val pesoKg = binding.etPesoKg.text?.toString()?.trim()?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
-            val variedad = binding.etVariedadPesaje.text?.toString().orEmpty()
-            val cuartel = binding.etCuartelPesaje.text?.toString().orEmpty()
 
-            if (pesoKg <= 0.0) {
-                binding.etPesoKg.error = "Ingrese un peso en kilos mayor a 0"
+            if (pesoKg !in ParihuelaRepository.PESO_MIN_KG..ParihuelaRepository.PESO_MAX_KG) {
+                binding.etPesoKg.error = "Ingrese un peso entre 0.10 y 60.00 kg"
+            } else {
+                binding.etPesoKg.error = null
             }
 
             viewModel.registrarPesaje(
                 cantidadJabas = cantidad,
-                pesoKg = pesoKg,
-                variedad = variedad,
-                cuartel = cuartel
+                pesoKg = pesoKg
             )
         }
     }
@@ -161,6 +162,7 @@ class ParihuelaActivity : AppCompatActivity() {
 
     private fun renderizar(state: ParihuelaUiState) {
         renderizarSelectorJornalero(state)
+        renderizarContextoPesajeDerivado(state)
 
         val tieneJornaleroValido = SelectorJornalerosAsistencia.puedeRegistrarPesaje(
             state.jornalerosDisponibles,
@@ -291,17 +293,63 @@ class ParihuelaActivity : AppCompatActivity() {
         }
     }
 
+    private fun renderizarContextoPesajeDerivado(state: ParihuelaUiState) {
+        val ctx = state.contextoPesajeDerivado
+        val cuartelTxt = when {
+            state.jornaleroSeleccionado.isNullOrBlank() -> "--"
+            ctx.cuartel.isNullOrBlank() -> "Sin asignar"
+            else -> ctx.cuartel
+        }
+        val variedadTxt = ctx.variedad ?: "--"
+        binding.tvCuartelPesajeDerivado.text = "Cuartel (del jornalero): $cuartelTxt"
+        binding.tvVariedadPesajeDerivada.text = "Variedad (catálogo): $variedadTxt"
+    }
+
     private fun mostrarDialogoAbrirParihuela() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 8)
         }
-        val etVariedad = EditText(this).apply { hint = "Variedad (obligatorio)" }
-        val etCuartel = EditText(this).apply { hint = "Cuartel (obligatorio)" }
+        val lblCuartel = TextView(this).apply {
+            text = "Cuartel (catálogo)"
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@ParihuelaActivity, R.color.text_secondary))
+        }
+        val opcionesCuartel = DatosMemoria.opcionesCuartel
+        val spnCuartel = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@ParihuelaActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                opcionesCuartel
+            )
+        }
+        val tvVariedadCatalogo = TextView(this).apply {
+            text = "Variedad (catálogo): --"
+            textSize = 14f
+            setPadding(0, 12, 0, 12)
+            setTextColor(ContextCompat.getColor(this@ParihuelaActivity, R.color.text_primary))
+        }
+        spnCuartel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                val cuartel = if (position <= 0) null else opcionesCuartel.getOrNull(position)
+                val variedad = cuartel?.let { DatosMemoria.obtenerVariedadPorCuartel(it) }
+                tvVariedadCatalogo.text = "Variedad (catálogo): ${variedad ?: "--"}"
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                tvVariedadCatalogo.text = "Variedad (catálogo): --"
+            }
+        }
         val etClp = EditText(this).apply { hint = "CLP (obligatorio)" }
         val etCuadrilla = EditText(this).apply { hint = "Cuadrilla (obligatorio)" }
-        layout.addView(etVariedad)
-        layout.addView(etCuartel)
+        layout.addView(lblCuartel)
+        layout.addView(spnCuartel)
+        layout.addView(tvVariedadCatalogo)
         layout.addView(etClp)
         layout.addView(etCuadrilla)
 
@@ -314,13 +362,18 @@ class ParihuelaActivity : AppCompatActivity() {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val v = etVariedad.text?.toString()?.trim().orEmpty()
-                val c = etCuartel.text?.toString()?.trim().orEmpty()
+                val pos = spnCuartel.selectedItemPosition
+                val c = if (pos <= 0) "" else opcionesCuartel.getOrNull(pos).orEmpty()
+                val v = DatosMemoria.obtenerVariedadPorCuartel(c).orEmpty()
                 val clp = etClp.text?.toString()?.trim().orEmpty()
                 val cuadrilla = etCuadrilla.text?.toString()?.trim().orEmpty()
                 if (v.isEmpty() || c.isEmpty() || clp.isEmpty() || cuadrilla.isEmpty()) {
-                    if (v.isEmpty()) etVariedad.error = "La variedad es obligatoria"
-                    if (c.isEmpty()) etCuartel.error = "El cuartel es obligatorio"
+                    if (c.isEmpty()) {
+                        tvVariedadCatalogo.text = "Seleccione un cuartel válido del catálogo"
+                        tvVariedadCatalogo.setTextColor(
+                            ContextCompat.getColor(this@ParihuelaActivity, android.R.color.holo_red_dark)
+                        )
+                    }
                     if (clp.isEmpty()) etClp.error = "El CLP es obligatorio"
                     if (cuadrilla.isEmpty()) etCuadrilla.error = "La cuadrilla es obligatoria"
                     viewModel.abrirNuevaParihuela(v, c, clp, cuadrilla)

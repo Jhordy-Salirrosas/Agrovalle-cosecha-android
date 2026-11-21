@@ -13,6 +13,7 @@ import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
+import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.util.QrUtil
 import kotlinx.coroutines.flow.Flow
@@ -254,6 +255,8 @@ class ParihuelaRepository(
         const val META_JABAS = 100
         const val LIMITE_JABAS = 120
         const val JABAS_POR_PISO = 11
+        const val PESO_MIN_KG = Constantes.PESO_BRUTO_MIN
+        const val PESO_MAX_KG = Constantes.PESO_BRUTO_MAX
         const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
@@ -265,6 +268,7 @@ class ParihuelaRepository(
         const val EVENTO_INTENTO_ALERTA_FALLIDA = "INTENTO_ALERTA_FALLIDA"
         const val EVENTO_TIEMPO_RETENCION = "TIEMPO_RETENCION_TOTAL"
         const val EVENTO_RETENIDA_CALIDAD = "RETENIDA_CALIDAD"
+        const val EVENTO_RETENCION_NO_APLICADA_SELLADA = "RETENCION_NO_APLICADA_SELLADA"
         const val EVENTO_LIBERACION_CALIDAD = "LIBERACION_CALIDAD"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
         const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
@@ -804,16 +808,35 @@ class ParihuelaRepository(
 
         if (accionLimpia.equals(ACCION_REVISAR_LOTE_PARIHUELA, ignoreCase = true)) {
             val parihuela = parihuelaDao.getById(actual.parihuelaId)
-            if (parihuela != null && parihuela.estado == EstadoParihuela.ABIERTA) {
-                parihuelaDao.update(parihuela.copy(estado = EstadoParihuela.RETENIDA_CALIDAD))
-                bitacoraDao.insert(
-                    BitacoraEntity(
-                        parihuelaId = parihuela.id,
-                        evento = EVENTO_RETENIDA_CALIDAD,
-                        detalle = "Retenida por calidad ($accionLimpia) por $responsableLimpio",
-                        fechaHora = ahora
-                    )
-                )
+            if (parihuela != null) {
+                when (parihuela.estado) {
+                    EstadoParihuela.ABIERTA -> {
+                        parihuelaDao.update(parihuela.copy(estado = EstadoParihuela.RETENIDA_CALIDAD))
+                        bitacoraDao.insert(
+                            BitacoraEntity(
+                                parihuelaId = parihuela.id,
+                                evento = EVENTO_RETENIDA_CALIDAD,
+                                detalle = "Retenida por calidad ($accionLimpia) por $responsableLimpio",
+                                fechaHora = ahora
+                            )
+                        )
+                    }
+
+                    EstadoParihuela.SELLADA,
+                    EstadoParihuela.SELLADA_ANTICIPADA -> {
+                        bitacoraDao.insert(
+                            BitacoraEntity(
+                                parihuelaId = parihuela.id,
+                                evento = EVENTO_RETENCION_NO_APLICADA_SELLADA,
+                                detalle = "Retención por calidad no aplicada sobre parihuela ${parihuela.codigo} " +
+                                    "(${parihuela.estado}) al resolver incidencia #${revisada.id} por $responsableLimpio",
+                                fechaHora = ahora
+                            )
+                        )
+                    }
+
+                    EstadoParihuela.RETENIDA_CALIDAD -> Unit
+                }
             }
         }
 
@@ -1197,8 +1220,8 @@ class ParihuelaRepository(
         ahora: Date = Date()
     ): ResultadoPesaje = enTransaccionAtomica {
         require(jornalero.isNotBlank()) { "El jornalero es obligatorio" }
-        require(pesoKg.isFinite() && pesoKg > 0.0) {
-            "El peso neto en kilos es obligatorio y debe ser mayor a 0"
+        require(pesoKg.isFinite() && pesoKg in PESO_MIN_KG..PESO_MAX_KG) {
+            "El peso debe estar entre 0.10 y 60.00 kg"
         }
         val abierta = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
             ?: run {

@@ -488,7 +488,9 @@ class ParihuelaRepositoryTest {
     @Test
     fun `pesaje que completa las 120 jabas sella la parihuela`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", Date(1_700_000_000_000L))
-        repository.registrarPesaje("Maria Lopez", 100, 180.0, "Ventura", "Cuartel 05")
+        repeat(4) {
+            repository.registrarPesaje("Maria Lopez", 25, 45.0, "Ventura", "Cuartel 05")
+        }
 
         val resultado = repository.registrarPesaje("Maria Lopez", 20, 36.0, "Ventura", "Cuartel 05")
 
@@ -508,7 +510,9 @@ class ParihuelaRepositoryTest {
         assertEquals(120, avance0.faltanPara120)
         assertEquals(0, avance0.porcentajeHacia120)
 
-        repository.registrarPesaje("Juan Perez", 100, 200.0, "Biloxi", "Cuartel 01")
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 25, 50.0, "Biloxi", "Cuartel 01")
+        }
         val avance100 = repository.observarAvanceParihuelaAbierta().first()!!
         assertEquals(100, avance100.jabasActuales)
         assertEquals(0, avance100.faltanPara100)
@@ -661,7 +665,8 @@ class ParihuelaRepositoryTest {
     @Test
     fun `pesaje que supera las 120 jabas es rechazado por capacidad sin alterar conteo ni crear incidencia`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", Date(1_700_000_000_000L))
-        repository.registrarPesaje("Juan Perez", 118, 220.0, "Biloxi", "Cuartel 01")
+        repository.registrarJabas(parihuela.id, 110, "Biloxi", "Cuartel 01")
+        repository.registrarPesaje("Juan Perez", 8, 16.0, "Biloxi", "Cuartel 01")
 
         val resPesaje = repository.registrarPesaje("Juan Perez", 5, 10.0, "Biloxi", "Cuartel 01")
 
@@ -677,7 +682,8 @@ class ParihuelaRepositoryTest {
     @Test
     fun `ajuste exacto a 120 jabas tras rechazo por capacidad sella la parihuela y abre la siguiente`() = runBlocking {
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", Date(1_700_000_000_000L))
-        repository.registrarPesaje("Juan Perez", 118, 220.0, "Biloxi", "Cuartel 01")
+        repository.registrarJabas(parihuela.id, 110, "Biloxi", "Cuartel 01")
+        repository.registrarPesaje("Juan Perez", 8, 16.0, "Biloxi", "Cuartel 01")
         repository.registrarPesaje("Juan Perez", 5, 10.0, "Biloxi", "Cuartel 01") // rechazado por capacidad
 
         val exacto = repository.registrarPesaje("Juan Perez", 2, 4.0, "Biloxi", "Cuartel 01")
@@ -1119,7 +1125,8 @@ class ParihuelaRepositoryTest {
             cuadrilla = "CUA-07",
             ahora = inicio
         )
-        repository.registrarPesaje("Juan Perez", 120, 230.5, "Ventura", "Cuartel 12", sellado)
+        repository.registrarJabas(parihuela.id, 100, "Ventura", "Cuartel 12", sellado)
+        repository.registrarPesaje("Juan Perez", 20, 38.5, "Ventura", "Cuartel 12", sellado)
 
         val trama = QrUtil.generarTramaQr(
             codigo = parihuela.codigo,
@@ -1152,7 +1159,9 @@ class ParihuelaRepositoryTest {
         val sellado = Date(primerPesaje.time + 22L * 60_000L + 15_000L)
 
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", apertura)
-        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", primerPesaje)
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 25, 45.0, "Biloxi", "Cuartel 01", primerPesaje)
+        }
         repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", sellado)
 
         val retencion = bitacoraDao.items.firstOrNull {
@@ -1295,7 +1304,10 @@ class ParihuelaRepositoryTest {
     fun `parihuela autoabierta al sellar 120 nace sin cronometro y lo inicia en su primer pesaje`() = runBlocking {
         val t0 = Date(1_700_000_000_000L)
         val primera = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
-        val sellado = repository.registrarPesaje("Juan Perez", 120, 240.0, "Biloxi", "Cuartel 01", t0)
+        repeat(3) {
+            repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", t0)
+        }
+        val sellado = repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", t0)
             as ResultadoPesaje.Registrado
         val segunda = sellado.resultadoJabas.nuevaParihuela!!
 
@@ -1470,7 +1482,9 @@ class ParihuelaRepositoryTest {
         val inicio = Date(1_700_000_000_000L)
         val sellado = Date(inicio.time + 15L * 60_000L)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", inicio)
-        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", inicio)
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 25, 45.0, "Biloxi", "Cuartel 01", inicio)
+        }
         repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", sellado)
         assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(parihuela.id)!!.estado)
 
@@ -1545,7 +1559,9 @@ class ParihuelaRepositoryTest {
         assertNull(repository.obtenerEstadoTiempoParihuela(sinPesajes.id, tConsulta))
 
         // Con primer pesaje y luego SELLADA -> devuelve estado de tiempo activo
-        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", t0)
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 25, 45.0, "Biloxi", "Cuartel 01", t0)
+        }
         val resSellado = repository.registrarPesaje("Juan Perez", 20, 36.0, "Biloxi", "Cuartel 01", Date(t0.time + 5L * 60_000L))
             as ResultadoPesaje.Registrado
         assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(sinPesajes.id)!!.estado)
@@ -1585,7 +1601,9 @@ class ParihuelaRepositoryTest {
         val t0 = Date(1_700_000_000_000L)
         val tSellado100 = Date(t0.time + 12L * 60_000L)
         val p100 = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
-        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", t0)
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 25, 45.0, "Biloxi", "Cuartel 01", t0)
+        }
 
         val sellada100 = repository.sellarEnMeta(p100.id, tSellado100)
         assertEquals(EstadoParihuela.SELLADA, sellada100.estado)
@@ -1600,7 +1618,10 @@ class ParihuelaRepositoryTest {
         val t1 = Date(tSellado100.time + 60_000L)
         val tSellado119 = Date(t1.time + 20L * 60_000L)
         val p119 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", t1)
-        repository.registrarPesaje("Maria Lopez", 119, 214.2, "Ventura", "Cuartel 05", t1)
+        repeat(4) {
+            repository.registrarPesaje("Maria Lopez", 25, 45.0, "Ventura", "Cuartel 05", t1)
+        }
+        repository.registrarPesaje("Maria Lopez", 19, 34.2, "Ventura", "Cuartel 05", t1)
 
         val sellada119 = repository.sellarEnMeta(p119.id, tSellado119)
         assertEquals(EstadoParihuela.SELLADA, sellada119.estado)
@@ -1617,7 +1638,10 @@ class ParihuelaRepositoryTest {
     fun `sellado en meta con 99 jabas es rechazado con error claro sin alterar la parihuela`() = runBlocking {
         val t0 = Date(1_700_000_000_000L)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
-        repository.registrarPesaje("Juan Perez", 99, 178.2, "Biloxi", "Cuartel 01", t0)
+        repeat(3) {
+            repository.registrarPesaje("Juan Perez", 25, 45.0, "Biloxi", "Cuartel 01", t0)
+        }
+        repository.registrarPesaje("Juan Perez", 24, 43.2, "Biloxi", "Cuartel 01", t0)
 
         try {
             repository.sellarEnMeta(parihuela.id, Date(t0.time + 60_000L))
@@ -1636,7 +1660,9 @@ class ParihuelaRepositoryTest {
     fun `sellado anticipado bajo 100 jabas sigue exigiendo motivo y deja estado SELLADA_ANTICIPADA`() = runBlocking {
         val t0 = Date(1_700_000_000_000L)
         val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
-        repository.registrarPesaje("Juan Perez", 60, 108.0, "Biloxi", "Cuartel 01", t0)
+        repeat(2) {
+            repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", t0)
+        }
 
         try {
             repository.sellarAnticipadamente(parihuela.id, "   ", Date(t0.time + 60_000L))
@@ -1675,7 +1701,9 @@ class ParihuelaRepositoryTest {
         repository.registrarPesaje("Juan Perez", 1, 2.0, "Biloxi", "Cuartel 01", t0) // 12
         assertEquals(2, parihuelaDao.getById(parihuela.id)!!.pisos)
 
-        repository.registrarPesaje("Juan Perez", 88, 176.0, "Biloxi", "Cuartel 01", t0) // 100
+        repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", t0) // 42
+        repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", t0) // 72
+        repository.registrarPesaje("Juan Perez", 28, 50.4, "Biloxi", "Cuartel 01", t0) // 100
         assertEquals(10, parihuelaDao.getById(parihuela.id)!!.pisos)
 
         repository.registrarPesaje("Juan Perez", 10, 20.0, "Biloxi", "Cuartel 01", t0) // 110
@@ -1714,7 +1742,10 @@ class ParihuelaRepositoryTest {
 
         // Datos de AYER: 1 sellada de 120 jabas, 1 sellada anticipada vacía (sin horaInicio), 1 sellada anticipada con jabas
         val pAyer120 = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-01", ayer2200)
-        val resAyer120 = repository.registrarPesaje("Juan Perez", 120, 240.0, "Ventura", "Cuartel 05", ayer2200)
+        repeat(3) {
+            repository.registrarPesaje("Juan Perez", 30, 60.0, "Ventura", "Cuartel 05", ayer2200)
+        }
+        val resAyer120 = repository.registrarPesaje("Juan Perez", 30, 60.0, "Ventura", "Cuartel 05", ayer2200)
             as ResultadoPesaje.Registrado
         assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(pAyer120.id)!!.estado)
         // La autoabierta de ayer se sella anticipadamente sin pesajes (horaInicio == null, horaSellado == ayer2220)
@@ -1727,7 +1758,9 @@ class ParihuelaRepositoryTest {
 
         // Datos de HOY: 1 sellada en meta (100 jabas), 1 sellada anticipada (20 jabas) y 1 abierta (15 jabas)
         val pHoyMeta = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", hoy0730)
-        repository.registrarPesaje("Juan Perez", 100, 180.0, "Biloxi", "Cuartel 01", hoy0730)
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 25, 45.0, "Biloxi", "Cuartel 01", hoy0730)
+        }
         repository.sellarEnMeta(pHoyMeta.id, hoy0800)
 
         val pHoyAnt = repository.abrirNuevaParihuela("Ventura", "Cuartel 05", "CLP-05", "CUA-02", hoy0830)
@@ -1811,6 +1844,95 @@ class ParihuelaRepositoryTest {
         )
         val jornalerosTrasReasig = repository.observarJornalerosConCuartel { t3 }.first()
         assertEquals("Cuartel 12", jornalerosTrasReasig.single { it.nombre == jornaleroRespaldo }.cuartelActual)
+    }
+
+    @Test
+    fun `resolver incidencia con retencion sobre parihuela SELLADA la marca REVISADA sin cambiar estado y deja constancia en bitacora`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val tSellado = Date(t0.time + 10L * 60_000L)
+        val tRev = Date(t0.time + 15L * 60_000L)
+
+        // Caso 1: parihuela SELLADA (120 jabas) con incidencia pendiente resuelta con acción de retención
+        val pSellada = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+        val mezcla1 = repository.registrarPesaje("Juan Perez", 2, 4.0, "Ventura", "Cuartel 01", t0)
+            as ResultadoPesaje.RechazadoPorMezcla
+        repeat(4) {
+            repository.registrarPesaje("Juan Perez", 30, 54.0, "Biloxi", "Cuartel 01", tSellado)
+        }
+        assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(pSellada.id)!!.estado)
+
+        val revisada1 = repository.resolverIncidencia(
+            incidenciaId = mezcla1.incidencia.id,
+            accion = ParihuelaRepository.ACCION_REVISAR_LOTE_PARIHUELA,
+            responsable = "Capataz Maria",
+            ahora = tRev
+        )
+        assertEquals(EstadoIncidencia.REVISADA, revisada1.estado)
+        assertEquals(ParihuelaRepository.ACCION_REVISAR_LOTE_PARIHUELA, revisada1.accionTomada)
+        assertEquals(EstadoParihuela.SELLADA, parihuelaDao.getById(pSellada.id)!!.estado)
+        val eventos1 = bitacoraDao.items.filter { it.parihuelaId == pSellada.id }
+        assertTrue(eventos1.none { it.evento == ParihuelaRepository.EVENTO_RETENIDA_CALIDAD })
+        val constancia1 = eventos1.single { it.evento == ParihuelaRepository.EVENTO_RETENCION_NO_APLICADA_SELLADA }
+        assertEquals(tRev, constancia1.fechaHora)
+        assertTrue(constancia1.detalle.contains(pSellada.codigo))
+        assertTrue(constancia1.detalle.contains("#${revisada1.id}"))
+
+        // Caso 2: parihuela SELLADA_ANTICIPADA también deja constancia sin cambiar estado
+        val pAuto = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().single()
+        val mezcla2 = repository.registrarPesaje("Juan Perez", 1, 2.0, "Biloxi", "Cuartel 05", tRev)
+            as ResultadoPesaje.RechazadoPorMezcla
+        val tAnt = Date(tRev.time + 60_000L)
+        repository.sellarAnticipadamente(pAuto.id, "Cierre anticipado", tAnt)
+        val tRev2 = Date(tAnt.time + 60_000L)
+
+        val revisada2 = repository.resolverIncidencia(
+            incidenciaId = mezcla2.incidencia.id,
+            accion = ParihuelaRepository.ACCION_REVISAR_LOTE_PARIHUELA,
+            responsable = "Capataz Maria",
+            ahora = tRev2
+        )
+        assertEquals(EstadoIncidencia.REVISADA, revisada2.estado)
+        assertEquals(EstadoParihuela.SELLADA_ANTICIPADA, parihuelaDao.getById(pAuto.id)!!.estado)
+        val constancia2 = bitacoraDao.items.single {
+            it.parihuelaId == pAuto.id && it.evento == ParihuelaRepository.EVENTO_RETENCION_NO_APLICADA_SELLADA
+        }
+        assertTrue(constancia2.detalle.contains(pAuto.codigo))
+        assertTrue(constancia2.detalle.contains("#${revisada2.id}"))
+    }
+
+    @Test
+    fun `registrarPesaje rechaza pesos fuera de 0_10 a 60_00 kg y acepta los limites exactos`() = runBlocking {
+        val t0 = Date(1_700_000_000_000L)
+        val parihuela = repository.abrirNuevaParihuela("Biloxi", "Cuartel 01", "CLP-01", "CUA-01", t0)
+
+        try {
+            repository.registrarPesaje("Juan Perez", 1, 0.05, "Biloxi", "Cuartel 01", t0)
+            fail("Debió rechazar un peso de 0.05 kg por estar bajo 0.10 kg")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("0.10"))
+            assertTrue(expected.message!!.contains("60.00"))
+        }
+
+        try {
+            repository.registrarPesaje("Juan Perez", 20, 60.01, "Biloxi", "Cuartel 01", t0)
+            fail("Debió rechazar un peso de 60.01 kg por superar 60.00 kg")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message!!.contains("0.10"))
+            assertTrue(expected.message!!.contains("60.00"))
+        }
+
+        assertTrue(pesajeDao.items.isEmpty())
+        assertEquals(0, parihuelaDao.getById(parihuela.id)!!.conteoJabas)
+        assertNull(parihuelaDao.getById(parihuela.id)!!.horaInicio)
+
+        val resMin = repository.registrarPesaje("Juan Perez", 1, 0.10, "Biloxi", "Cuartel 01", t0)
+        assertTrue(resMin is ResultadoPesaje.Registrado)
+        assertEquals(0.10, (resMin as ResultadoPesaje.Registrado).pesaje.pesoKg, 0.0001)
+
+        val resMax = repository.registrarPesaje("Juan Perez", 25, 60.00, "Biloxi", "Cuartel 01", Date(t0.time + 60_000L))
+        assertTrue(resMax is ResultadoPesaje.Registrado)
+        assertEquals(60.00, (resMax as ResultadoPesaje.Registrado).pesaje.pesoKg, 0.0001)
+        assertEquals(26, parihuelaDao.getById(parihuela.id)!!.conteoJabas)
     }
 
     private class FakeParihuelaDao : ParihuelaDao {
