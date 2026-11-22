@@ -9,6 +9,8 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.Spinner
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -18,14 +20,19 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.agrovalle.cosecha.R
+import com.agrovalle.cosecha.data.DatosMemoria
 import com.agrovalle.cosecha.data.local.entity.EstadoParihuela
+import com.agrovalle.cosecha.data.repository.EstadoTiempoEspera
 import com.agrovalle.cosecha.data.repository.JornaleroAsistenciaOpcion
+import com.agrovalle.cosecha.data.repository.ParihuelaRepository
 import com.agrovalle.cosecha.data.repository.SelectorJornalerosAsistencia
 import com.agrovalle.cosecha.databinding.ActivityParihuelaBinding
 import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.viewmodel.ParihuelaUiState
 import com.agrovalle.cosecha.viewmodel.ParihuelaViewModel
 import com.agrovalle.cosecha.worker.TiempoEsperaWorker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -81,7 +88,13 @@ class ParihuelaActivity : AppCompatActivity() {
         }
 
         binding.btnSelladoAnticipado.setOnClickListener {
-            mostrarDialogoSelladoAnticipado()
+            val state = viewModel.uiState.value
+            val jabas = state.avance?.jabasActuales ?: state.parihuelaAbierta?.conteoJabas ?: 0
+            if (jabas in ParihuelaRepository.META_JABAS until ParihuelaRepository.LIMITE_JABAS) {
+                viewModel.sellarEnMeta()
+            } else {
+                mostrarDialogoSelladoAnticipado()
+            }
         }
 
         binding.btnActualizarListaJornaleros.setOnClickListener {
@@ -115,18 +128,16 @@ class ParihuelaActivity : AppCompatActivity() {
         binding.btnRegistrarPesajeParihuela.setOnClickListener {
             val cantidad = binding.etCantidadJabas.text?.toString()?.toIntOrNull() ?: 0
             val pesoKg = binding.etPesoKg.text?.toString()?.trim()?.replace(',', '.')?.toDoubleOrNull() ?: 0.0
-            val variedad = binding.etVariedadPesaje.text?.toString().orEmpty()
-            val cuartel = binding.etCuartelPesaje.text?.toString().orEmpty()
 
-            if (pesoKg <= 0.0) {
-                binding.etPesoKg.error = "Ingrese un peso en kilos mayor a 0"
+            if (pesoKg !in ParihuelaRepository.PESO_MIN_KG..ParihuelaRepository.PESO_MAX_KG) {
+                binding.etPesoKg.error = "Ingrese un peso entre 0.10 y 60.00 kg"
+            } else {
+                binding.etPesoKg.error = null
             }
 
             viewModel.registrarPesaje(
                 cantidadJabas = cantidad,
-                pesoKg = pesoKg,
-                variedad = variedad,
-                cuartel = cuartel
+                pesoKg = pesoKg
             )
         }
     }
@@ -134,8 +145,16 @@ class ParihuelaActivity : AppCompatActivity() {
     private fun observarEstado() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { state ->
-                    renderizar(state)
+                launch {
+                    viewModel.uiState.collect { state ->
+                        renderizar(state)
+                    }
+                }
+                launch {
+                    while (isActive) {
+                        viewModel.refrescarTiempoRetencion()
+                        delay(10_000L)
+                    }
                 }
             }
         }
@@ -143,6 +162,7 @@ class ParihuelaActivity : AppCompatActivity() {
 
     private fun renderizar(state: ParihuelaUiState) {
         renderizarSelectorJornalero(state)
+        renderizarContextoPesajeDerivado(state)
 
         val tieneJornaleroValido = SelectorJornalerosAsistencia.puedeRegistrarPesaje(
             state.jornalerosDisponibles,
@@ -155,9 +175,10 @@ class ParihuelaActivity : AppCompatActivity() {
         if (abierta == null) {
             binding.tvCodigoParihuela.text = "Sin parihuela abierta"
             binding.tvDetalleParihuela.text = "Abra una parihuela para comenzar el registro."
-            binding.tvConteoJabas.text = "0 / 120 jabas"
+            binding.tvConteoJabas.text = "0 / 120 jabas · 0 pisos"
             binding.progressParihuela.progress = 0
             binding.tvFaltantes.text = "Faltan 100 para 100 | 120 para 120 (0%)"
+            binding.tvTiempoRetencion.visibility = View.GONE
             binding.btnAbrirParihuela.visibility = View.VISIBLE
             binding.btnSelladoAnticipado.visibility = View.GONE
             binding.btnRegistrarPesajeParihuela.isEnabled = tieneJornaleroValido
@@ -173,11 +194,14 @@ class ParihuelaActivity : AppCompatActivity() {
                 "Variedad: ${abierta.variedad} • Cuartel: ${abierta.cuartel}\n" +
                     "CLP: ${abierta.clp.ifBlank { "-" }} • Cuadrilla: ${abierta.cuadrilla.ifBlank { "-" }}"
             val jabas = avance?.jabasActuales ?: abierta.conteoJabas
-            val f100 = avance?.faltanPara100 ?: (100 - jabas).coerceAtLeast(0)
-            val f120 = avance?.faltanPara120 ?: (120 - jabas).coerceAtLeast(0)
-            val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / 120).coerceIn(0, 100)
-            binding.tvConteoJabas.text = "$jabas / 120 jabas"
+            val pisos = avance?.pisos ?: ParihuelaRepository.calcularPisos(jabas)
+            val f100 = avance?.faltanPara100 ?: (ParihuelaRepository.META_JABAS - jabas).coerceAtLeast(0)
+            val f120 = avance?.faltanPara120 ?: (ParihuelaRepository.LIMITE_JABAS - jabas).coerceAtLeast(0)
+            val pct = avance?.porcentajeHacia120 ?: ((jabas * 100) / ParihuelaRepository.LIMITE_JABAS).coerceIn(0, 100)
+            val enMeta = jabas in ParihuelaRepository.META_JABAS until ParihuelaRepository.LIMITE_JABAS
+            binding.tvConteoJabas.text = "$jabas / 120 jabas · $pisos pisos"
             binding.progressParihuela.progress = pct
+            renderizarTiempoRetencion(state)
             if (retenida) {
                 binding.tvFaltantes.text =
                     "Parihuela retenida por calidad — libérela desde Incidencias antes de continuar o sellar."
@@ -191,13 +215,13 @@ class ParihuelaActivity : AppCompatActivity() {
                 binding.btnRegistrarPesajeParihuela.isEnabled = false
                 binding.btnRegistrarPesajeParihuela.text = "Proceda a sellar la parihuela"
                 binding.btnSelladoAnticipado.isEnabled = true
-                binding.btnSelladoAnticipado.text = "Sellado anticipado"
+                binding.btnSelladoAnticipado.text = if (enMeta) "Sellar" else "Sellado anticipado"
             } else {
                 binding.tvFaltantes.text = "Faltan $f100 para 100 | $f120 para 120 ($pct%)"
                 binding.btnRegistrarPesajeParihuela.isEnabled = tieneJornaleroValido
                 binding.btnRegistrarPesajeParihuela.text = "Registrar pesaje"
                 binding.btnSelladoAnticipado.isEnabled = true
-                binding.btnSelladoAnticipado.text = "Sellado anticipado"
+                binding.btnSelladoAnticipado.text = if (enMeta) "Sellar" else "Sellado anticipado"
             }
             binding.btnAbrirParihuela.visibility = View.GONE
             binding.btnSelladoAnticipado.visibility = View.VISIBLE
@@ -210,6 +234,33 @@ class ParihuelaActivity : AppCompatActivity() {
             binding.tvMensajeEstado.setTextColor(ContextCompat.getColor(this, colorRes))
         } else {
             binding.tvMensajeEstado.visibility = View.GONE
+        }
+    }
+
+    private fun renderizarTiempoRetencion(state: ParihuelaUiState) {
+        binding.tvTiempoRetencion.visibility = View.VISIBLE
+        val tiempo = state.estadoTiempo
+        if (tiempo == null || !tiempo.cronometroIniciado) {
+            binding.tvTiempoRetencion.text = "Tiempo de retención: sin iniciar (esperando primer pesaje)"
+            binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+            return
+        }
+        val restanteTxt = ParihuelaRepository.formatearDuracionRetencion(tiempo.restanteMs)
+        when (tiempo.estado) {
+            EstadoTiempoEspera.EN_ESPERA -> {
+                binding.tvTiempoRetencion.text = "Retención restante: $restanteTxt"
+                binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, R.color.verde_agricola))
+            }
+
+            EstadoTiempoEspera.POR_VENCER -> {
+                binding.tvTiempoRetencion.text = "Retención por vencer: $restanteTxt restantes"
+                binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, R.color.color_warning))
+            }
+
+            EstadoTiempoEspera.EXCEDIDA -> {
+                binding.tvTiempoRetencion.text = "Retención excedida: $restanteTxt (límite 45 min superado)"
+                binding.tvTiempoRetencion.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+            }
         }
     }
 
@@ -242,17 +293,63 @@ class ParihuelaActivity : AppCompatActivity() {
         }
     }
 
+    private fun renderizarContextoPesajeDerivado(state: ParihuelaUiState) {
+        val ctx = state.contextoPesajeDerivado
+        val cuartelTxt = when {
+            state.jornaleroSeleccionado.isNullOrBlank() -> "--"
+            ctx.cuartel.isNullOrBlank() -> "Sin asignar"
+            else -> ctx.cuartel
+        }
+        val variedadTxt = ctx.variedad ?: "--"
+        binding.tvCuartelPesajeDerivado.text = "Cuartel (del jornalero): $cuartelTxt"
+        binding.tvVariedadPesajeDerivada.text = "Variedad (catálogo): $variedadTxt"
+    }
+
     private fun mostrarDialogoAbrirParihuela() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 8)
         }
-        val etVariedad = EditText(this).apply { hint = "Variedad (obligatorio)" }
-        val etCuartel = EditText(this).apply { hint = "Cuartel (obligatorio)" }
+        val lblCuartel = TextView(this).apply {
+            text = "Cuartel (catálogo)"
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@ParihuelaActivity, R.color.text_secondary))
+        }
+        val opcionesCuartel = DatosMemoria.opcionesCuartel
+        val spnCuartel = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@ParihuelaActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                opcionesCuartel
+            )
+        }
+        val tvVariedadCatalogo = TextView(this).apply {
+            text = "Variedad (catálogo): --"
+            textSize = 14f
+            setPadding(0, 12, 0, 12)
+            setTextColor(ContextCompat.getColor(this@ParihuelaActivity, R.color.text_primary))
+        }
+        spnCuartel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                val cuartel = if (position <= 0) null else opcionesCuartel.getOrNull(position)
+                val variedad = cuartel?.let { DatosMemoria.obtenerVariedadPorCuartel(it) }
+                tvVariedadCatalogo.text = "Variedad (catálogo): ${variedad ?: "--"}"
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                tvVariedadCatalogo.text = "Variedad (catálogo): --"
+            }
+        }
         val etClp = EditText(this).apply { hint = "CLP (obligatorio)" }
         val etCuadrilla = EditText(this).apply { hint = "Cuadrilla (obligatorio)" }
-        layout.addView(etVariedad)
-        layout.addView(etCuartel)
+        layout.addView(lblCuartel)
+        layout.addView(spnCuartel)
+        layout.addView(tvVariedadCatalogo)
         layout.addView(etClp)
         layout.addView(etCuadrilla)
 
@@ -265,13 +362,18 @@ class ParihuelaActivity : AppCompatActivity() {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val v = etVariedad.text?.toString()?.trim().orEmpty()
-                val c = etCuartel.text?.toString()?.trim().orEmpty()
+                val pos = spnCuartel.selectedItemPosition
+                val c = if (pos <= 0) "" else opcionesCuartel.getOrNull(pos).orEmpty()
+                val v = DatosMemoria.obtenerVariedadPorCuartel(c).orEmpty()
                 val clp = etClp.text?.toString()?.trim().orEmpty()
                 val cuadrilla = etCuadrilla.text?.toString()?.trim().orEmpty()
                 if (v.isEmpty() || c.isEmpty() || clp.isEmpty() || cuadrilla.isEmpty()) {
-                    if (v.isEmpty()) etVariedad.error = "La variedad es obligatoria"
-                    if (c.isEmpty()) etCuartel.error = "El cuartel es obligatorio"
+                    if (c.isEmpty()) {
+                        tvVariedadCatalogo.text = "Seleccione un cuartel válido del catálogo"
+                        tvVariedadCatalogo.setTextColor(
+                            ContextCompat.getColor(this@ParihuelaActivity, android.R.color.holo_red_dark)
+                        )
+                    }
                     if (clp.isEmpty()) etClp.error = "El CLP es obligatorio"
                     if (cuadrilla.isEmpty()) etCuadrilla.error = "La cuadrilla es obligatoria"
                     viewModel.abrirNuevaParihuela(v, c, clp, cuadrilla)

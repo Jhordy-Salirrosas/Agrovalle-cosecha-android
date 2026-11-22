@@ -13,6 +13,7 @@ import com.agrovalle.cosecha.data.local.entity.IncidenciaEntity
 import com.agrovalle.cosecha.data.local.entity.ParihuelaEntity
 import com.agrovalle.cosecha.data.local.entity.PesajeEntity
 import com.agrovalle.cosecha.data.local.entity.ReasignacionEntity
+import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.NotificacionTiempoUtil
 import com.agrovalle.cosecha.util.QrUtil
 import kotlinx.coroutines.flow.Flow
@@ -192,7 +193,8 @@ data class AvanceParihuela(
     val jabasActuales: Int,
     val faltanPara100: Int,
     val faltanPara120: Int,
-    val porcentajeHacia120: Int
+    val porcentajeHacia120: Int,
+    val pisos: Int = 0
 )
 
 /**
@@ -243,11 +245,22 @@ class ParihuelaRepository(
     companion object {
         private val mutexTransaccion = Mutex()
         private val ZONA_HORARIA_LIMA: TimeZone = TimeZone.getTimeZone("America/Lima")
+        private val ESTADOS_RETENCION_ACTIVA = setOf(
+            EstadoParihuela.ABIERTA,
+            EstadoParihuela.RETENIDA_CALIDAD,
+            EstadoParihuela.SELLADA,
+            EstadoParihuela.SELLADA_ANTICIPADA
+        )
 
+        const val META_JABAS = 100
         const val LIMITE_JABAS = 120
+        const val JABAS_POR_PISO = 11
+        const val PESO_MIN_KG = Constantes.PESO_BRUTO_MIN
+        const val PESO_MAX_KG = Constantes.PESO_BRUTO_MAX
         const val LIMITE_ESPERA_MS = 45L * 60L * 1000L
         const val UMBRAL_POR_VENCER_MS = 5L * 60L * 1000L
         const val EVENTO_SELLADO_LIMITE = "SELLADO_LIMITE"
+        const val EVENTO_SELLADO_META = "SELLADO_META"
         const val EVENTO_SELLADO_ANTICIPADO = "SELLADO_ANTICIPADO"
         const val EVENTO_INTENTO_EDICION = "INTENTO_EDICION"
         const val EVENTO_ALERTA_POR_VENCER = "ALERTA_POR_VENCER"
@@ -255,6 +268,7 @@ class ParihuelaRepository(
         const val EVENTO_INTENTO_ALERTA_FALLIDA = "INTENTO_ALERTA_FALLIDA"
         const val EVENTO_TIEMPO_RETENCION = "TIEMPO_RETENCION_TOTAL"
         const val EVENTO_RETENIDA_CALIDAD = "RETENIDA_CALIDAD"
+        const val EVENTO_RETENCION_NO_APLICADA_SELLADA = "RETENCION_NO_APLICADA_SELLADA"
         const val EVENTO_LIBERACION_CALIDAD = "LIBERACION_CALIDAD"
         const val TIPO_MEZCLA_VARIEDAD = "MEZCLA_VARIEDAD"
         const val TIPO_MEZCLA_CUARTEL = "MEZCLA_CUARTEL"
@@ -327,12 +341,47 @@ class ParihuelaRepository(
             return "$minutos min $segundos s"
         }
 
+        /** Calcula los pisos estibados como techo(conteoJabas / 11) (AGV-006 / H-02). */
+        fun calcularPisos(conteoJabas: Int): Int {
+            if (conteoJabas <= 0) return 0
+            return (conteoJabas + JABAS_POR_PISO - 1) / JABAS_POR_PISO
+        }
+
         /** Verifica si [fecha] pertenece al mismo día calendario que [referencia] en America/Lima. */
         internal fun esMismaJornadaLima(fecha: Date, referencia: Date): Boolean {
             val calFecha = Calendar.getInstance(ZONA_HORARIA_LIMA).apply { time = fecha }
             val calRef = Calendar.getInstance(ZONA_HORARIA_LIMA).apply { time = referencia }
             return calFecha.get(Calendar.YEAR) == calRef.get(Calendar.YEAR) &&
                 calFecha.get(Calendar.DAY_OF_YEAR) == calRef.get(Calendar.DAY_OF_YEAR)
+        }
+
+        /**
+         * Obtiene la marca temporal que representa la jornada de una parihuela (H-04):
+         * prioriza [ParihuelaEntity.horaInicio] (primer pesaje); si no hubo pesajes pero ya fue
+         * sellada, usa [ParihuelaEntity.horaSellado]; si aún no tiene pesajes ni sellado, extrae
+         * la marca de apertura del código `PAR-<epochMs>-<seq>` si sigue el formato estándar.
+         */
+        internal fun fechaJornadaParihuela(parihuela: ParihuelaEntity): Date? {
+            parihuela.horaInicio?.let { return it }
+            parihuela.horaSellado?.let { return it }
+            val partes = parihuela.codigo.split('-')
+            if (partes.size >= 3 && partes[0] == "PAR") {
+                partes[1].toLongOrNull()?.let { epochMs ->
+                    if (epochMs > 0L) return Date(epochMs)
+                }
+            }
+            return null
+        }
+
+        /** Indica si la [parihuela] pertenece a la jornada de [referencia] en America/Lima (H-04). */
+        internal fun perteneceAJornada(parihuela: ParihuelaEntity, referencia: Date): Boolean {
+            val fecha = fechaJornadaParihuela(parihuela)
+            return if (fecha != null) {
+                esMismaJornadaLima(fecha, referencia)
+            } else {
+                parihuela.estado == EstadoParihuela.ABIERTA ||
+                    parihuela.estado == EstadoParihuela.RETENIDA_CALIDAD
+            }
         }
     }
 
@@ -514,6 +563,7 @@ class ParihuelaRepository(
         if (nuevoConteo == LIMITE_JABAS) {
             val sellada = actualConInicio.copy(
                 conteoJabas = nuevoConteo,
+                pisos = calcularPisos(nuevoConteo),
                 estado = EstadoParihuela.SELLADA,
                 horaSellado = ahora
             )
@@ -547,7 +597,10 @@ class ParihuelaRepository(
             )
         }
 
-        val actualizada = actualConInicio.copy(conteoJabas = nuevoConteo)
+        val actualizada = actualConInicio.copy(
+            conteoJabas = nuevoConteo,
+            pisos = calcularPisos(nuevoConteo)
+        )
         parihuelaDao.update(actualizada)
         return ResultadoRegistroJabas(
             parihuela = actualizada,
@@ -555,6 +608,65 @@ class ParihuelaRepository(
             selladaPorLimite = false,
             cronometroIniciadoEnEstePesaje = esPrimerPesaje
         )
+    }
+
+    /**
+     * Sella manualmente una parihuela ABIERTA que alcanzó la meta (100 a 119 jabas)
+     * sin exigir motivo, dejándola en estado [EstadoParihuela.SELLADA] (AGV-006 / H-01).
+     */
+    suspend fun sellarEnMeta(
+        parihuelaId: Long,
+        ahora: Date = Date()
+    ): ParihuelaEntity = enTransaccionAtomica {
+        val actual = parihuelaDao.getById(parihuelaId)
+            ?: throw IllegalArgumentException("Parihuela no encontrada: $parihuelaId")
+
+        if (actual.estado == EstadoParihuela.RETENIDA_CALIDAD) {
+            throw IllegalStateException(
+                "La parihuela ${actual.codigo} está retenida por calidad y no se puede sellar hasta liberarla"
+            )
+        }
+
+        if (actual.estado != EstadoParihuela.ABIERTA) {
+            bitacoraDao.insert(
+                BitacoraEntity(
+                    parihuelaId = actual.id,
+                    evento = EVENTO_INTENTO_EDICION,
+                    detalle = "Intento de sellado en meta sobre parihuela en estado ${actual.estado}",
+                    fechaHora = ahora
+                )
+            )
+            throw IllegalStateException("La parihuela ${actual.codigo} ya está sellada")
+        }
+
+        require(actual.conteoJabas >= META_JABAS) {
+            "La parihuela ${actual.codigo} tiene ${actual.conteoJabas} jabas: bajo $META_JABAS corresponde sellado anticipado con motivo"
+        }
+        require(actual.conteoJabas < LIMITE_JABAS) {
+            "La parihuela ${actual.codigo} alcanzó $LIMITE_JABAS jabas: a $LIMITE_JABAS el sellado es automático"
+        }
+
+        val sellada = actual.copy(
+            estado = EstadoParihuela.SELLADA,
+            horaSellado = ahora,
+            motivoSelladoAnticipado = null,
+            pisos = calcularPisos(actual.conteoJabas)
+        )
+        parihuelaDao.update(sellada)
+
+        registrarRetencionExcedidaSiCorresponde(actual, ahora)
+
+        bitacoraDao.insert(
+            BitacoraEntity(
+                parihuelaId = sellada.id,
+                evento = EVENTO_SELLADO_META,
+                detalle = "Sellado en meta al alcanzar ${sellada.conteoJabas} jabas",
+                fechaHora = ahora
+            )
+        )
+        registrarTiempoRetencionTotalAlSellar(sellada, ahora)
+
+        return@enTransaccionAtomica sellada
     }
 
     /**
@@ -696,16 +808,35 @@ class ParihuelaRepository(
 
         if (accionLimpia.equals(ACCION_REVISAR_LOTE_PARIHUELA, ignoreCase = true)) {
             val parihuela = parihuelaDao.getById(actual.parihuelaId)
-            if (parihuela != null && parihuela.estado == EstadoParihuela.ABIERTA) {
-                parihuelaDao.update(parihuela.copy(estado = EstadoParihuela.RETENIDA_CALIDAD))
-                bitacoraDao.insert(
-                    BitacoraEntity(
-                        parihuelaId = parihuela.id,
-                        evento = EVENTO_RETENIDA_CALIDAD,
-                        detalle = "Retenida por calidad ($accionLimpia) por $responsableLimpio",
-                        fechaHora = ahora
-                    )
-                )
+            if (parihuela != null) {
+                when (parihuela.estado) {
+                    EstadoParihuela.ABIERTA -> {
+                        parihuelaDao.update(parihuela.copy(estado = EstadoParihuela.RETENIDA_CALIDAD))
+                        bitacoraDao.insert(
+                            BitacoraEntity(
+                                parihuelaId = parihuela.id,
+                                evento = EVENTO_RETENIDA_CALIDAD,
+                                detalle = "Retenida por calidad ($accionLimpia) por $responsableLimpio",
+                                fechaHora = ahora
+                            )
+                        )
+                    }
+
+                    EstadoParihuela.SELLADA,
+                    EstadoParihuela.SELLADA_ANTICIPADA -> {
+                        bitacoraDao.insert(
+                            BitacoraEntity(
+                                parihuelaId = parihuela.id,
+                                evento = EVENTO_RETENCION_NO_APLICADA_SELLADA,
+                                detalle = "Retención por calidad no aplicada sobre parihuela ${parihuela.codigo} " +
+                                    "(${parihuela.estado}) al resolver incidencia #${revisada.id} por $responsableLimpio",
+                                fechaHora = ahora
+                            )
+                        )
+                    }
+
+                    EstadoParihuela.RETENIDA_CALIDAD -> Unit
+                }
             }
         }
 
@@ -777,13 +908,15 @@ class ParihuelaRepository(
 
     /**
      * Obtiene el estado de tiempo de espera leyendo la parihuela directamente desde la BD.
+     * Devuelve el estado para cualquier parihuela con cronómetro iniciado ([ParihuelaEntity.horaInicio] != null),
+     * sin restringir por estado, y `null` si no existe o aún no tiene primer pesaje (H-08).
      */
     suspend fun obtenerEstadoTiempoParihuela(
         parihuelaId: Long,
         ahora: Date = Date()
     ): EstadoTiempoParihuela? {
         val parihuela = parihuelaDao.getById(parihuelaId) ?: return null
-        if (parihuela.estado != EstadoParihuela.ABIERTA) return null
+        if (parihuela.horaInicio == null) return null
         return calcularTiempoEspera(parihuela, ahora)
     }
 
@@ -827,7 +960,10 @@ class ParihuelaRepository(
             tickFlow
         ) { parihuelas, pesajes, reasignaciones, _ ->
             val ahora = ahoraProvider()
-            val abiertas = parihuelas
+            val parihuelasJornada = parihuelas.filter { perteneceAJornada(it, ahora) }
+            val pesajesJornada = pesajes.filter { esMismaJornadaLima(it.fechaHora, ahora) }
+
+            val abiertas = parihuelasJornada
                 .filter { it.estado == EstadoParihuela.ABIERTA }
                 .map { parihuela ->
                     ParihuelaAbiertaResumen(
@@ -837,11 +973,11 @@ class ParihuelaRepository(
                 }
                 .sortedBy { it.tiempoEspera.restanteMs }
 
-            val retenidas = parihuelas.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
-            val rendimientoDetallado = construirRendimientoDetallado(pesajes, ahora)
+            val retenidas = parihuelasJornada.filter { it.estado == EstadoParihuela.RETENIDA_CALIDAD }
+            val rendimientoDetallado = construirRendimientoDetallado(pesajesJornada, ahora)
             val jornalerosActivos = construirJornalerosConCuartel(
                 parihuelas = parihuelas,
-                pesajes = pesajes,
+                pesajes = pesajesJornada,
                 reasignaciones = reasignaciones,
                 ahora = ahora
             )
@@ -849,22 +985,22 @@ class ParihuelaRepository(
                 .groupBy { it.cuartelActual }
                 .toSortedMap()
             val parihuelasById = parihuelas.associateBy { it.id }
-            val kilosPorCuartel = construirKilosPorCuartel(parihuelasById, pesajes)
+            val kilosPorCuartel = construirKilosPorCuartel(parihuelasById, pesajesJornada)
 
             ResumenPanelCapataz(
                 totalAbiertas = abiertas.size,
                 totalRetenidasCalidad = retenidas.size,
-                totalSelladas = parihuelas.count { it.estado == EstadoParihuela.SELLADA },
-                totalSelladasAnticipadas = parihuelas.count {
+                totalSelladas = parihuelasJornada.count { it.estado == EstadoParihuela.SELLADA },
+                totalSelladasAnticipadas = parihuelasJornada.count {
                     it.estado == EstadoParihuela.SELLADA_ANTICIPADA
                 },
-                totalJabas = parihuelas.sumOf { it.conteoJabas },
-                totalKilosNetos = pesajes.sumOf { it.pesoKg },
+                totalJabas = parihuelasJornada.sumOf { it.conteoJabas },
+                totalKilosNetos = pesajesJornada.sumOf { it.pesoKg },
                 totalJornalerosActivos = jornalerosActivos.size,
-                jabasPorVariedad = parihuelas
+                jabasPorVariedad = parihuelasJornada
                     .groupBy { it.variedad }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
-                jabasPorCuartel = parihuelas
+                jabasPorCuartel = parihuelasJornada
                     .groupBy { it.cuartel }
                     .mapValues { (_, lista) -> lista.sumOf { it.conteoJabas } },
                 kilosPorCuartel = kilosPorCuartel,
@@ -1030,7 +1166,7 @@ class ParihuelaRepository(
                 val clave = p.jornalero.trim().lowercase()
                 nombresCanonicos.putIfAbsent(clave, p.jornalero.trim())
                 parihuelasById[p.parihuelaId]?.cuartel?.let { cuartel ->
-                    cuartelInicialPorPesaje[clave] = cuartel
+                    cuartelInicialPorPesaje.putIfAbsent(clave, cuartel)
                 }
             }
 
@@ -1084,8 +1220,8 @@ class ParihuelaRepository(
         ahora: Date = Date()
     ): ResultadoPesaje = enTransaccionAtomica {
         require(jornalero.isNotBlank()) { "El jornalero es obligatorio" }
-        require(pesoKg.isFinite() && pesoKg > 0.0) {
-            "El peso neto en kilos es obligatorio y debe ser mayor a 0"
+        require(pesoKg.isFinite() && pesoKg in PESO_MIN_KG..PESO_MAX_KG) {
+            "El peso debe estar entre 0.10 y 60.00 kg"
         }
         val abierta = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first().firstOrNull()
             ?: run {
@@ -1144,9 +1280,10 @@ class ParihuelaRepository(
             AvanceParihuela(
                 parihuelaId = actual.id,
                 jabasActuales = jabas,
-                faltanPara100 = (100 - jabas).coerceAtLeast(0),
+                faltanPara100 = (META_JABAS - jabas).coerceAtLeast(0),
                 faltanPara120 = (LIMITE_JABAS - jabas).coerceAtLeast(0),
-                porcentajeHacia120 = ((jabas * 100) / LIMITE_JABAS).coerceIn(0, 100)
+                porcentajeHacia120 = ((jabas * 100) / LIMITE_JABAS).coerceIn(0, 100),
+                pisos = calcularPisos(jabas)
             )
         }
     }
@@ -1199,7 +1336,8 @@ class ParihuelaRepository(
     }
 
     /**
-     * Evalúa las parihuelas abiertas de forma atómica e intenta mostrar las notificaciones
+     * Evalúa de forma atómica todas las parihuelas con cronómetro en curso (retención activa:
+     * ABIERTA, RETENIDA_CALIDAD, SELLADA y SELLADA_ANTICIPADA) e intenta mostrar las notificaciones
      * correspondientes (POR_VENCER o RETENCION_EXCEDIDA, una sola vez exitosa).
      * Si la notificación no pudo mostrarse (ej. sin permiso), NO marca la alerta como
      * mostrada para permitir reintentos y registra [EVENTO_INTENTO_ALERTA_FALLIDA].
@@ -1213,11 +1351,12 @@ class ParihuelaRepository(
             NotificacionTiempoUtil.ResultadoNotificacion(mostrada = true)
         }
     ): List<ParihuelaEntity> = enTransaccionAtomica {
-        val abiertas = parihuelaDao.observeByEstado(EstadoParihuela.ABIERTA).first()
+        val enRetencionActiva = parihuelaDao.observeAll().first().filter {
+            it.estado in ESTADOS_RETENCION_ACTIVA && it.horaInicio != null
+        }
         val notificadas = mutableListOf<ParihuelaEntity>()
 
-        for (parihuela in abiertas) {
-            if (parihuela.horaInicio == null) continue
+        for (parihuela in enRetencionActiva) {
             val tiempo = calcularTiempoEspera(parihuela, ahora)
             val resultado = when (tiempo.estado) {
                 EstadoTiempoEspera.EN_ESPERA -> false

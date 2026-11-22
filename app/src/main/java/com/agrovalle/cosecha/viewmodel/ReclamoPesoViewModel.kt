@@ -89,11 +89,15 @@ class ReclamoPesoViewModel : ViewModel() {
             _uiState.update { it.copy(evaluacionEnCurso = null) }
             return
         }
+        val taraTotal = CalculadoraReclamoPeso.resolverTaraTotal(
+            taraTotalOriginalKg = seleccionado.pesaje.taraTotal,
+            cantidadJabas = seleccionado.pesaje.cantidadJabas,
+            taraPorJabaRespaldoKg = _uiState.value.taraVigenteKg
+        )
         val nuevoNeto = runCatching {
-            CalculadoraReclamoPeso.calcularPesoNeto(
+            CalculadoraReclamoPeso.calcularPesoNetoConTaraTotal(
                 pesoBrutoKg = bruto,
-                cantidadJabas = seleccionado.pesaje.cantidadJabas,
-                taraPorJabaKg = _uiState.value.taraVigenteKg
+                taraTotalKg = taraTotal
             )
         }.getOrNull()
         if (nuevoNeto == null) {
@@ -111,10 +115,14 @@ class ReclamoPesoViewModel : ViewModel() {
         val bruto = parsearPesoBrutoValido(pesoBrutoTexto) ?: return false
         val seleccionado = _uiState.value.pesajeSeleccionado ?: return false
         val nuevoNeto = try {
-            CalculadoraReclamoPeso.calcularPesoNeto(
-                pesoBrutoKg = bruto,
+            val taraTotal = CalculadoraReclamoPeso.resolverTaraTotal(
+                taraTotalOriginalKg = seleccionado.pesaje.taraTotal,
                 cantidadJabas = seleccionado.pesaje.cantidadJabas,
-                taraPorJabaKg = _uiState.value.taraVigenteKg
+                taraPorJabaRespaldoKg = _uiState.value.taraVigenteKg
+            )
+            CalculadoraReclamoPeso.calcularPesoNetoConTaraTotal(
+                pesoBrutoKg = bruto,
+                taraTotalKg = taraTotal
             )
         } catch (e: IllegalArgumentException) {
             _uiState.update {
@@ -183,11 +191,12 @@ class ReclamoPesoViewModel : ViewModel() {
             ) {
                 is DatosMemoria.ResultadoRegistroReclamo.CompensacionRegistrada -> {
                     cargarDatos(seleccionado.pesaje.id)
-                    val compTxt = String.format(Locale.US, "%+.3f kg", resultado.pesajeCompensatorio.pesoNeto)
+                    val compTxt = String.format(Locale.US, "%.2f kg", resultado.pesajeCompensatorio.pesoNeto)
+                    val diffTxt = String.format(Locale.US, "%+.0f g", resultado.reclamo.diferenciaGramos)
                     _uiState.update {
                         it.copy(
                             evaluacionEnCurso = null,
-                            mensaje = "Compensatorio #${resultado.pesajeCompensatorio.id} ($compTxt) registrado y autorizado por ${resultado.reclamo.capatazAutorizador}. Original #${seleccionado.pesaje.id} intacto.",
+                            mensaje = "Compensatorio #${resultado.pesajeCompensatorio.id} ($compTxt, dif. $diffTxt) registrado y autorizado por ${resultado.reclamo.capatazAutorizador}. Original #${seleccionado.pesaje.id} intacto.",
                             esError = false
                         )
                     }

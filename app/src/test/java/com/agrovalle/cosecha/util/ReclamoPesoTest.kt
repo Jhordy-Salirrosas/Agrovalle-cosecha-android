@@ -1,8 +1,10 @@
 package com.agrovalle.cosecha.util
 
 import com.agrovalle.cosecha.data.DatosMemoria
+import com.agrovalle.cosecha.model.CalibracionTara
 import com.agrovalle.cosecha.model.EstadoReclamoPeso
 import com.agrovalle.cosecha.model.Pesaje
+import com.agrovalle.cosecha.viewmodel.ReclamoPesoViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -42,7 +44,7 @@ class ReclamoPesoTest {
         assertTrue(eval.excedeTolerancia)
         assertEquals(21.0, eval.diferenciaAbsolutaGramos, 0.001)
         assertEquals(0.021, eval.diferenciaKg, 0.0001)
-        assertEquals(0.021, eval.pesoCompensatorioKg, 0.0001)
+        assertEquals(8.021, eval.pesoCompensatorioKg, 0.0001)
     }
 
     @Test
@@ -172,10 +174,13 @@ class ReclamoPesoTest {
         val comp = compRes.pesajeCompensatorio
         assertTrue(comp.esCompensatorio)
         assertEquals(original.id, comp.pesajeOriginalId)
-        assertEquals(0.350, comp.pesoNeto, 0.0001)
+        assertEquals(8.350, comp.pesoNeto, 0.0001)
+        assertEquals(9.850, comp.pesoBruto, 0.0001)
+        assertEquals(1.500, comp.taraTotal, 0.0001)
+        assertEquals(original.cantidadJabas, comp.cantidadJabas)
         assertEquals(jornalero.id, comp.jornaleroId)
 
-        // El acumulado diario refleja el peso corregido (8.00 + 0.35 = 8.35 kg)
+        // El acumulado diario refleja el peso corregido una sola vez (sustituye al original: 8.35 kg)
         val acumulado = DatosMemoria.acumuladoDiario(jornalero.id, now - 10_000L, now + 120_000L)
         assertEquals(8.350, acumulado, 0.0001)
 
@@ -188,7 +193,8 @@ class ReclamoPesoTest {
         assertEquals(original.id, reg.pesajeOriginalId)
         assertEquals(comp.id, reg.pesajeCompensatorioId)
         assertNotNull(reg.pesoCompensatorioKg)
-        assertEquals(0.350, reg.pesoCompensatorioKg!!, 0.0001)
+        assertEquals(8.350, reg.pesoCompensatorioKg!!, 0.0001)
+        assertEquals(0.350, reg.diferenciaKg, 0.0001)
         assertEquals(350.0, reg.diferenciaGramos, 0.001)
         assertEquals("QR_CAPATAZ_001", reg.codigoQrCapataz)
         assertEquals("Carlos Mendez (Capataz)", reg.capatazAutorizador)
@@ -353,5 +359,156 @@ class ReclamoPesoTest {
         assertEquals(0.0, res5.reclamo.diferenciaGramos, 0.001)
         assertEquals(0.0, res5.reclamo.diferenciaKg, 0.0001)
         assertEquals(tara5, res5.reclamo.taraAplicadaKg, 0.0001)
+    }
+
+    @Test
+    fun `reclamo tras recalibrar la tara usa la tara original del pesaje y no la tara vigente`() {
+        val jornalero = DatosMemoria.listaJornaleros.first()
+        val now = 1_700_000_000_000L
+
+        // Pesaje original con tara calibrada de 0.350 kg/jaba -> 4 jabas = 1.40 kg; bruto 9.40 -> neto 8.00 kg
+        DatosMemoria.guardarCalibracion(
+            CalibracionTara(
+                taraPromedioCalculada = 0.350,
+                pesoMuestra5Jabas = 1.750,
+                asistenteNombre = "Asistente",
+                timestamp = now - 60_000L,
+                aprobado = true
+            )
+        )
+        val original = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 4,
+                pesoBruto = 9.40,
+                taraTotal = 1.40,
+                pesoNeto = 8.00,
+                timestamp = now,
+                esTaraPorDefecto = false
+            )
+        )
+
+        // Entre el pesaje y el reclamo se recalibra la tara a 0.400 kg/jaba (4 jabas serían 1.60 kg, +200 g)
+        DatosMemoria.guardarCalibracion(
+            CalibracionTara(
+                taraPromedioCalculada = 0.400,
+                pesoMuestra5Jabas = 2.000,
+                asistenteNombre = "Asistente",
+                timestamp = now + 30_000L,
+                aprobado = true
+            )
+        )
+
+        // El ViewModel debe evaluar en vivo con la tara original (1.40 kg), dando +10 g (dentro de tolerancia)
+        val viewModel = ReclamoPesoViewModel()
+        viewModel.cargarDatos(original.id)
+        viewModel.actualizarPesoBrutoReclamo("9.41")
+        val evalVm = viewModel.uiState.value.evaluacionEnCurso
+        assertNotNull(evalVm)
+        assertEquals(8.01, evalVm!!.pesoNuevoNetoKg, 0.0001)
+        assertEquals(10.0, evalVm.diferenciaGramos, 0.001)
+        assertFalse(evalVm.excedeTolerancia)
+
+        // Al registrar el reclamo pasando la tara vigente (0.400), igualmente debe aplicar 1.40 kg del original
+        val resultado = DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = original.id,
+            nuevoPesoBrutoKg = 9.41,
+            taraPorJabaKg = 0.400,
+            timestamp = now + 60_000L
+        )
+        assertTrue(resultado is DatosMemoria.ResultadoRegistroReclamo.DentroDeTolerancia)
+        val reclamo = (resultado as DatosMemoria.ResultadoRegistroReclamo.DentroDeTolerancia).reclamo
+        assertEquals(1.40, reclamo.taraAplicadaKg, 0.0001)
+        assertEquals(8.01, reclamo.pesoNuevoNetoKg, 0.0001)
+        assertEquals(10.0, reclamo.diferenciaGramos, 0.001)
+
+        // Si un registro antiguo no tuviera taraTotal guardada (0.0), respalda en la tara vigente (0.400 * 4 = 1.60)
+        val sinTaraGuardada = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 4,
+                pesoBruto = 9.60,
+                taraTotal = 0.0,
+                pesoNeto = 8.00,
+                timestamp = now + 90_000L
+            )
+        )
+        val resRespaldo = DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = sinTaraGuardada.id,
+            nuevoPesoBrutoKg = 9.60,
+            taraPorJabaKg = 0.400,
+            timestamp = now + 120_000L
+        ) as DatosMemoria.ResultadoRegistroReclamo.DentroDeTolerancia
+        assertEquals(1.60, resRespaldo.reclamo.taraAplicadaKg, 0.0001)
+        assertEquals(0.0, resRespaldo.reclamo.diferenciaGramos, 0.001)
+    }
+
+    @Test
+    fun `repesaje menor genera compensatorio con nuevo neto positivo y acumulado diario refleja el peso corregido`() {
+        val jornalero = DatosMemoria.listaJornaleros.first()
+        val now = 1_700_000_000_000L
+
+        val original = DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 4,
+                pesoBruto = 9.50,
+                taraTotal = 1.50,
+                pesoNeto = 8.00,
+                timestamp = now
+            )
+        )
+
+        // Repesaje menor: bruto 9.10 - tara 1.50 = 7.60 kg (-400 g > 20 g)
+        val resultado = DatosMemoria.registrarReclamoPeso(
+            pesajeOriginalId = original.id,
+            nuevoPesoBrutoKg = 9.10,
+            taraPorJabaKg = Constantes.TARA_POR_DEFECTO,
+            codigoQrCapataz = "QR_CAPATAZ_001",
+            timestamp = now + 60_000L
+        ) as DatosMemoria.ResultadoRegistroReclamo.CompensacionRegistrada
+
+        // El original permanece intacto
+        val originalPersistido = DatosMemoria.buscarPesajePorId(original.id)!!
+        assertEquals(8.00, originalPersistido.pesoNeto, 0.0001)
+        assertEquals(9.50, originalPersistido.pesoBruto, 0.0001)
+
+        // El compensatorio guarda el nuevo peso neto y bruto positivos, nunca negativos
+        val comp = resultado.pesajeCompensatorio
+        assertTrue(comp.esCompensatorio)
+        assertEquals(original.id, comp.pesajeOriginalId)
+        assertEquals(7.60, comp.pesoNeto, 0.0001)
+        assertEquals(9.10, comp.pesoBruto, 0.0001)
+        assertEquals(1.50, comp.taraTotal, 0.0001)
+        assertTrue(DatosMemoria.pesajes.all { it.pesoNeto > 0.0 && it.pesoBruto > 0.0 })
+
+        // La diferencia negativa queda registrada como dato del reclamo
+        assertEquals(-0.40, resultado.reclamo.diferenciaKg, 0.0001)
+        assertEquals(-400.0, resultado.reclamo.diferenciaGramos, 0.001)
+        assertEquals(7.60, resultado.reclamo.pesoCompensatorioKg!!, 0.0001)
+
+        // El acumulado diario iguala exactamente el neto corregido (7.60 kg), sustituyendo al original
+        assertEquals(
+            7.60,
+            DatosMemoria.acumuladoDiario(jornalero.id, now - 10_000L, now + 120_000L),
+            0.0001
+        )
+
+        // Con un segundo pesaje normal de 5.00 kg del mismo jornalero, suma 7.60 + 5.00 = 12.60 kg
+        DatosMemoria.registrarPesaje(
+            Pesaje(
+                jornaleroId = jornalero.id,
+                cantidadJabas = 2,
+                pesoBruto = 5.75,
+                taraTotal = 0.75,
+                pesoNeto = 5.00,
+                timestamp = now + 90_000L
+            )
+        )
+        assertEquals(
+            12.60,
+            DatosMemoria.acumuladoDiario(jornalero.id, now - 10_000L, now + 120_000L),
+            0.0001
+        )
     }
 }

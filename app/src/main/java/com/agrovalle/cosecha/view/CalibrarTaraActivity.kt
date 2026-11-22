@@ -1,9 +1,12 @@
 package com.agrovalle.cosecha.view
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -12,6 +15,8 @@ import com.agrovalle.cosecha.databinding.ActivityCalibrarTaraBinding
 import com.agrovalle.cosecha.util.Constantes
 import com.agrovalle.cosecha.util.FeedbackUtil
 import com.agrovalle.cosecha.viewmodel.CalibracionTaraViewModel
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import java.util.Locale
 
 /**
@@ -26,10 +31,58 @@ import java.util.Locale
  */
 class CalibrarTaraActivity : AppCompatActivity() {
 
+    private enum class AccionAutorizacionTara {
+        CONFIRMAR_CALIBRACION,
+        RESTAURAR_POR_DEFECTO
+    }
+
     private lateinit var binding: ActivityCalibrarTaraBinding
     private val viewModel: CalibracionTaraViewModel by viewModels()
 
     private lateinit var vistasPasos: List<TextView>
+    private var accionPendienteQr: AccionAutorizacionTara = AccionAutorizacionTara.CONFIRMAR_CALIBRACION
+
+    private val permisoCamaraLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { concedido ->
+        if (concedido) {
+            abrirEscanerCapataz()
+        } else {
+            FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
+            Toast.makeText(
+                this,
+                "Permiso de cámara denegado: no se puede leer la credencial QR del capataz.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private val escanerQrCapatazLauncher = registerForActivityResult(ScanContract()) { result ->
+        val contenido = result.contents
+        if (contenido.isNullOrBlank()) {
+            Toast.makeText(
+                this,
+                "Escaneo de credencial cancelado. La tara no fue modificada.",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            when (accionPendienteQr) {
+                AccionAutorizacionTara.CONFIRMAR_CALIBRACION -> {
+                    viewModel.confirmarYGuardarTara(contenido) {
+                        FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = false)
+                        irARegistrarPesaje()
+                    }
+                }
+
+                AccionAutorizacionTara.RESTAURAR_POR_DEFECTO -> {
+                    viewModel.usarTaraPorDefecto(contenido) {
+                        FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
+                        irARegistrarPesaje()
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,17 +136,47 @@ class CalibrarTaraActivity : AppCompatActivity() {
             viewModel.registrarPesoMuestra(viewModel.pesoActualMuestra)
         }
 
-        // AGV-015: guarda la tara del turno en memoria
+        // AGV-015 / RNF-015.1 (H-12): exige credencial QR de capataz/supervisor antes de guardar
         binding.btnConfirmarCalibracion.setOnClickListener {
-            FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = false)
-            viewModel.confirmarYGuardarTara { irARegistrarPesaje() }
+            if (viewModel.validarListoParaAutorizacionQr()) {
+                accionPendienteQr = AccionAutorizacionTara.CONFIRMAR_CALIBRACION
+                solicitarCamaraYAbrirEscaner()
+            }
         }
 
         // AGV-003 escenario 2: se omite la calibracion y se usa la tara por defecto
+        // Si ya había una tara calibrada aprobada, exige autorización QR para modificarla (H-12)
         binding.btnOmitirCalibracion.setOnClickListener {
-            FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
-            viewModel.usarTaraPorDefecto { irARegistrarPesaje() }
+            if (viewModel.requiereAutorizacionParaOmitir()) {
+                accionPendienteQr = AccionAutorizacionTara.RESTAURAR_POR_DEFECTO
+                solicitarCamaraYAbrirEscaner()
+            } else {
+                FeedbackUtil.ejecutarFeedbackConfirmacion(this, esAlerta = true)
+                viewModel.usarTaraPorDefecto { irARegistrarPesaje() }
+            }
         }
+    }
+
+    private fun solicitarCamaraYAbrirEscaner() {
+        val concedido = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        if (concedido) {
+            abrirEscanerCapataz()
+        } else {
+            permisoCamaraLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun abrirEscanerCapataz() {
+        val opciones = ScanOptions().apply {
+            setPrompt("Escanee la credencial QR del capataz o supervisor (ej. QR_CAPATAZ_001)")
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setBeepEnabled(false)
+            setOrientationLocked(false)
+        }
+        escanerQrCapatazLauncher.launch(opciones)
     }
 
     private fun irARegistrarPesaje() {

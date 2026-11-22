@@ -96,6 +96,17 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
 
+                <TextView
+                    android:id="@+id/tvTiempoRetencion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Tiempo de retención: sin iniciar"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAbrirParihuela"
                     android:layout_width="match_parent"
@@ -223,31 +234,32 @@
                         android:inputType="numberDecimal" />
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <com.google.android.material.textfield.TextInputLayout
+                <LinearLayout
+                    android:id="@+id/layoutContextoPesajeDerivado"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:hint="Variedad">
+                    android:layout_marginTop="10dp"
+                    android:background="@color/fondo_app"
+                    android:orientation="vertical"
+                    android:padding="12dp">
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etVariedadPesaje"
+                    <TextView
+                        android:id="@+id/tvCuartelPesajeDerivado"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
+                        android:text="Cuartel (del jornalero): --"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:hint="Cuartel">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etCuartelPesaje"
+                    <TextView
+                        android:id="@+id/tvVariedadPesajeDerivada"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
+                        android:layout_marginTop="4dp"
+                        android:text="Variedad (catálogo): --"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp" />
+                </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRegistrarPesajeParihuela"
